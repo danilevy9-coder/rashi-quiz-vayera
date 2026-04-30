@@ -24,6 +24,7 @@ CREATE TABLE quiz_attempts (
   xp_earned INT NOT NULL,
   hearts_remaining INT DEFAULT 0,
   max_streak INT DEFAULT 0,
+  duration_seconds INT DEFAULT 0,
   completed_at TIMESTAMPTZ DEFAULT NOW()
 );
 

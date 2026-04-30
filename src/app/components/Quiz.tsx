@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { parts, type QuizPart } from "../quizData";
 import { summaries } from "../quizData/summaries";
 import { type Player, getPlayerBestScores, saveQuizAttempt, updatePlayerStats, updatePlayerBestStreak } from "../lib/supabase";
@@ -29,6 +29,7 @@ export default function Quiz() {
   const [shuffledChoices, setShuffledChoices] = useState<
     { text: string; originalIndex: number }[]
   >([]);
+  const quizStartTimeRef = useRef<number>(0);
 
   const questions = selectedPart?.questions ?? [];
   const total = questions.length;
@@ -263,6 +264,7 @@ export default function Quiz() {
             setStreak(0);
             setMaxStreak(0);
             setShowStreakBonus(false);
+            quizStartTimeRef.current = Date.now();
           }}
           onBack={() => {
             setSelectedPart(null);
@@ -284,6 +286,7 @@ export default function Quiz() {
         partTitle={selectedPart.partTitle}
         partId={selectedPart.partId}
         maxStreak={maxStreak}
+        durationSeconds={Math.round((Date.now() - quizStartTimeRef.current) / 1000)}
         player={currentPlayer}
         onRestart={resetQuiz}
         onHome={() => {

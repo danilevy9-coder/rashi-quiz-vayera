@@ -27,6 +27,7 @@ export interface QuizAttempt {
   xp_earned: number;
   hearts_remaining: number;
   max_streak: number;
+  duration_seconds: number;
   completed_at: string;
 }
 
@@ -130,4 +131,32 @@ export async function getPlayerBestScores(
     }
   }
   return bests;
+}
+
+// --- Admin API ---
+
+export async function getAllPlayersWithStats(): Promise<Player[]> {
+  const { data, error } = await supabase
+    .from("players")
+    .select("*")
+    .order("total_xp", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getAllAttempts(): Promise<(QuizAttempt & { player_name?: string })[]> {
+  const { data, error } = await supabase
+    .from("quiz_attempts")
+    .select("*, players(name, avatar_emoji)")
+    .order("completed_at", { ascending: false });
+  if (error) throw error;
+  // Flatten the join
+  return (data ?? []).map((row: Record<string, unknown>) => {
+    const players = row.players as { name: string; avatar_emoji: string } | null;
+    return {
+      ...row,
+      player_name: players?.name ?? "Unknown",
+      player_emoji: players?.avatar_emoji ?? "📖",
+    };
+  }) as (QuizAttempt & { player_name?: string; player_emoji?: string })[];
 }

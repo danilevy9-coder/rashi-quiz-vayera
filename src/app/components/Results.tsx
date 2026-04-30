@@ -13,6 +13,7 @@ interface ResultsProps {
   partTitle: string;
   partId: number;
   maxStreak: number;
+  durationSeconds: number;
   player: Player;
   onRestart: () => void;
   onHome: () => void;
@@ -69,6 +70,7 @@ export default function Results({
   partTitle,
   partId,
   maxStreak,
+  durationSeconds,
   player,
   onRestart,
   onHome,
@@ -115,6 +117,7 @@ export default function Results({
           xp_earned: xp,
           hearts_remaining: 0,
           max_streak: maxStreak,
+          duration_seconds: durationSeconds,
         });
 
         // Update player stats
@@ -234,6 +237,10 @@ export default function Results({
                 <p className="text-xs text-duo-gray-dark font-semibold">רצף שיא</p>
               </div>
             )}
+            <div className="text-center">
+              <p className="text-2xl font-bold text-duo-blue">⏱ {Math.floor(durationSeconds / 60)}:{(durationSeconds % 60).toString().padStart(2, "0")}</p>
+              <p className="text-xs text-duo-gray-dark font-semibold">זמן</p>
+            </div>
           </div>
         </div>
 

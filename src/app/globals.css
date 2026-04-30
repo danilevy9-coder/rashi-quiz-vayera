@@ -2,25 +2,92 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1a1a2e;
+  --duo-green: #58cc02;
+  --duo-green-dark: #46a302;
+  --duo-red: #ff4b4b;
+  --duo-red-light: #ffdfe0;
+  --duo-green-light: #d7ffb8;
+  --duo-gray: #e5e5e5;
+  --duo-gray-dark: #afafaf;
+  --duo-gold: #ffc800;
+  --duo-blue: #1cb0f6;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-duo-green: var(--duo-green);
+  --color-duo-green-dark: var(--duo-green-dark);
+  --color-duo-red: var(--duo-red);
+  --color-duo-red-light: var(--duo-red-light);
+  --color-duo-green-light: var(--duo-green-light);
+  --color-duo-gray: var(--duo-gray);
+  --color-duo-gray-dark: var(--duo-gray-dark);
+  --color-duo-gold: var(--duo-gold);
+  --color-duo-blue: var(--duo-blue);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Animations */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.8); opacity: 0; }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes shakeX {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+}
+
+@keyframes confetti {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(-200px) rotate(720deg); opacity: 0; }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.35s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-pop-in {
+  animation: popIn 0.4s ease-out;
+}
+
+.animate-shake {
+  animation: shakeX 0.5s ease-in-out;
+}
+
+.animate-confetti {
+  animation: confetti 1.5s ease-out forwards;
 }

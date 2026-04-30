@@ -16,54 +16,52 @@ if (!apiKey) {
 const outputDir = path.join(root, "public/audio/sfx");
 fs.mkdirSync(outputDir, { recursive: true });
 
-// Sound effects — varied Hebrew phrases for each category
+// Sound effects — natural Hebrew phrases, no leading exclamation marks
+// Written in proper Hebrew word order for natural TTS pronunciation
 const SOUNDS = {
   correct: [
-    "!מצוין",
-    "!נכון מאוד",
-    "!יופי של תשובה",
-    "!מדהים",
-    "!בול פגיעה",
-    "!כל הכבוד",
-    "!נהדר",
-    "!בדיוק ככה",
+    "מצוין!",
+    "נכון מאוד!",
+    "יופי של תשובה!",
+    "מדהים!",
+    "בול פגיעה!",
+    "כל הכבוד!",
+    "נהדר!",
+    "בדיוק ככה!",
   ],
   wrong: [
-    "לא נורא, נסה שוב",
-    "קרוב! בפעם הבאה",
-    "!אל תוותר",
-    "!המשך לנסות",
-    "עוד קצת ותצליח",
+    "לא נורא, נסה שוב!",
+    "קרוב! בפעם הבאה.",
+    "אל תוותרו!",
+    "המשיכו לנסות!",
+    "עוד קצת ותצליחו!",
   ],
   streak: [
     "וואו, רצף מטורף!",
-    "!אתה בוער, אש",
-    "!בלתי ניתן לעצירה",
+    "אש! אתם בוערים!",
+    "בלתי ניתן לעצירה!",
   ],
   levelup: [
-    "!מזל טוב, עלית רמה",
-    "!רמה חדשה, כל הכבוד",
+    "מזל טוב! עליתם רמה!",
+    "רמה חדשה! כל הכבוד!",
   ],
   perfect: [
-    "!מושלם, ציון מושלם, אלוף",
+    "מושלם! ציון מושלם! אלופים!",
   ],
   complete: [
-    "!כל הכבוד, סיימת את החידון",
-    "!יופי, סיימת, כל הכבוד",
+    "כל הכבוד! סיימתם את החידון!",
+    "יופי! סיימתם! כל הכבוד!",
   ],
 };
 
-// Use different voices for variety
-const VOICES = ["nova", "shimmer", "alloy", "echo", "fable", "onyx"];
-
-async function generateAudio(text, filename, voice = "nova") {
+async function generateAudio(text, filename) {
   const outPath = path.join(outputDir, filename);
   if (fs.existsSync(outPath)) {
     console.log(`  Skipping ${filename} (already exists)`);
     return;
   }
 
-  console.log(`  Generating ${filename} — "${text}" [voice: ${voice}]`);
+  console.log(`  Generating ${filename} — "${text}"`);
   const response = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
     headers: {
@@ -73,9 +71,9 @@ async function generateAudio(text, filename, voice = "nova") {
     body: JSON.stringify({
       model: "tts-1-hd",
       input: text,
-      voice: voice,
+      voice: "nova",          // Nova is best for Hebrew
       response_format: "mp3",
-      speed: 1.1, // Slightly faster for sound effects
+      speed: 0.95,            // Slightly slower — natural and clear
     }),
   });
 
@@ -94,9 +92,7 @@ async function generateAudio(text, filename, voice = "nova") {
 for (const [category, phrases] of Object.entries(SOUNDS)) {
   console.log(`\n${category.toUpperCase()}:`);
   for (let i = 0; i < phrases.length; i++) {
-    // Pick a different voice for each sound in the category for variety
-    const voice = VOICES[i % VOICES.length];
-    await generateAudio(phrases[i], `${category}${i + 1}.mp3`, voice);
+    await generateAudio(phrases[i], `${category}${i + 1}.mp3`);
   }
 }
 

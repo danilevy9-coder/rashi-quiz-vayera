@@ -3,12 +3,40 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { parts, type QuizPart } from "../quizData";
 import { summaries } from "../quizData/summaries";
-import { type Player, getPlayerBestScores, saveQuizAttempt, updatePlayerStats, updatePlayerBestStreak } from "../lib/supabase";
-import { getLevelForXp, getXpProgress } from "../lib/levels";
+import { type Player, getPlayerBestScores } from "../lib/supabase";
+import { getXpProgress } from "../lib/levels";
 import { playSound, preloadSounds } from "../lib/sounds";
 import Results from "./Results";
 import StudyScreen from "./StudyScreen";
 import PlayerSelect from "./PlayerSelect";
+
+// Encouraging messages that rotate — never boring
+const CORRECT_MESSAGES = [
+  "נכון!",
+  "מצוין!",
+  "יופי!",
+  "נהדר!",
+  "בול!",
+  "כל הכבוד!",
+  "בדיוק!",
+  "מושלם!",
+];
+const STREAK_MESSAGES = [
+  "אש! 🔥🔥",
+  "מדהים! 🔥🔥🔥",
+  "בלתי ניתן לעצירה! 🔥",
+  "רצף מטורף! 🔥🔥",
+];
+const WRONG_MESSAGES = [
+  "לא נכון",
+  "אופס!",
+  "כמעט!",
+  "לא הפעם",
+];
+
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
 
 export default function Quiz() {
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
@@ -26,9 +54,13 @@ export default function Quiz() {
   const [streak, setStreak] = useState(0);
   const [maxStreak, setMaxStreak] = useState(0);
   const [showStreakBonus, setShowStreakBonus] = useState(false);
+  const [floatingXp, setFloatingXp] = useState<number | null>(null);
+  const [feedbackMsg, setFeedbackMsg] = useState("");
+  const [feedbackEmoji, setFeedbackEmoji] = useState("");
   const [shuffledChoices, setShuffledChoices] = useState<
     { text: string; originalIndex: number }[]
   >([]);
+  const [questionKey, setQuestionKey] = useState(0); // for re-triggering animations
   const quizStartTimeRef = useRef<number>(0);
 
   const questions = selectedPart?.questions ?? [];
@@ -59,6 +91,7 @@ export default function Quiz() {
       [choices[i], choices[j]] = [choices[j], choices[i]];
     }
     setShuffledChoices(choices);
+    setQuestionKey((k) => k + 1);
   }, [question]);
 
   const handleSelect = useCallback(
@@ -70,15 +103,24 @@ export default function Quiz() {
       if (originalIndex === question.correctIndex) {
         const newStreak = streak + 1;
         const streakBonus = newStreak >= 3 ? 10 : newStreak >= 2 ? 5 : 0;
+        const earned = 10 + streakBonus;
         setScore((s) => s + 1);
-        setXp((x) => x + 10 + streakBonus);
+        setXp((x) => x + earned);
         setStreak(newStreak);
         setMaxStreak((m) => Math.max(m, newStreak));
 
-        // Play sound — streak sound if on a streak, otherwise correct
+        // Floating XP animation
+        setFloatingXp(earned);
+        setTimeout(() => setFloatingXp(null), 900);
+
+        // Varied feedback
         if (newStreak >= 3) {
+          setFeedbackMsg(pickRandom(STREAK_MESSAGES));
+          setFeedbackEmoji("🎉");
           playSound("streak");
         } else {
+          setFeedbackMsg(pickRandom(CORRECT_MESSAGES));
+          setFeedbackEmoji("🎉");
           playSound("correct");
         }
 
@@ -89,6 +131,8 @@ export default function Quiz() {
       } else {
         setHearts((h) => Math.max(0, h - 1));
         setStreak(0);
+        setFeedbackMsg(pickRandom(WRONG_MESSAGES));
+        setFeedbackEmoji("😔");
         playSound("wrong");
       }
     },
@@ -132,11 +176,11 @@ export default function Quiz() {
 
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4 py-10" dir="rtl">
-        <div className="max-w-lg w-full text-center animate-fade-in">
+        <div className="max-w-lg w-full text-center">
           {/* Player header */}
-          <div className="flex items-center justify-between mb-6 bg-gray-50 rounded-2xl p-4 border-2 border-duo-gray">
+          <div className="flex items-center justify-between mb-6 bg-gray-50 rounded-2xl p-4 border-2 border-duo-gray animate-fade-in-up">
             <div className="flex items-center gap-3 text-right">
-              <span className="text-3xl">{currentPlayer.avatar_emoji}</span>
+              <span className="text-3xl animate-bounce-in">{currentPlayer.avatar_emoji}</span>
               <div>
                 <p className="text-lg font-bold text-foreground">{currentPlayer.name}</p>
                 <p className="text-sm text-duo-gray-dark">
@@ -157,14 +201,14 @@ export default function Quiz() {
 
           {/* Level progress */}
           {xpInfo.next && (
-            <div className="mb-6 bg-duo-gold/10 rounded-2xl p-4 border-2 border-duo-gold/30">
+            <div className="mb-6 bg-duo-gold/10 rounded-2xl p-4 border-2 border-duo-gold/30 animate-fade-in-up" style={{ animationDelay: "0.05s" }}>
               <div className="flex justify-between text-sm font-bold mb-1">
                 <span className="text-duo-gold">{xpInfo.current.emoji} רמה {xpInfo.current.level}</span>
                 <span className="text-duo-gray-dark">{xpInfo.next.emoji} רמה {xpInfo.next.level}</span>
               </div>
               <div className="h-3 bg-duo-gray rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-duo-gold rounded-full transition-all duration-500"
+                  className="h-full bg-duo-gold rounded-full transition-all duration-1000"
                   style={{ width: `${xpInfo.progressPct}%` }}
                 />
               </div>
@@ -174,8 +218,8 @@ export default function Quiz() {
             </div>
           )}
 
-          <div className="text-6xl mb-4">📖</div>
-          <h1 className="text-4xl md:text-5xl font-extrabold text-foreground mb-2">
+          <div className="text-6xl mb-3 animate-bounce-in">📖</div>
+          <h1 className="text-4xl md:text-5xl font-extrabold text-foreground mb-2 animate-fade-in-up">
             חידון רש&quot;י
           </h1>
           <p className="text-xl text-duo-gray-dark font-semibold mb-2">
@@ -186,7 +230,7 @@ export default function Quiz() {
           </p>
 
           <div className="grid grid-cols-1 gap-3">
-            {parts.map((part) => {
+            {parts.map((part, idx) => {
               const best = bestScores[part.partId];
               const bestPct = best ? Math.round((best.score / best.total) * 100) : null;
 
@@ -198,7 +242,8 @@ export default function Quiz() {
                     setShowStudy(true);
                     setQuizStarted(false);
                   }}
-                  className="w-full text-right p-5 rounded-2xl border-2 border-b-4 border-duo-gray bg-white hover:border-duo-green hover:bg-duo-green-light active:border-b-2 active:mt-[2px] transition-all cursor-pointer group"
+                  className="w-full text-right p-5 rounded-2xl border-2 border-b-4 border-duo-gray bg-white hover:border-duo-green hover:bg-duo-green-light active:border-b-2 active:mt-[2px] transition-all cursor-pointer group animate-fade-in-up"
+                  style={{ animationDelay: `${0.05 * (idx + 1)}s` }}
                 >
                   <div className="flex items-center gap-4">
                     <span className={`w-12 h-12 rounded-xl text-white flex items-center justify-center text-xl font-bold shrink-0 group-hover:scale-110 transition-transform ${
@@ -218,12 +263,20 @@ export default function Quiz() {
                         {part.partSubtitle}
                       </p>
                       {best && (
-                        <p className="text-xs font-bold mt-1 text-duo-green">
-                          שיא: {best.score}/{best.total} ({bestPct}%)
-                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex-1 h-1.5 bg-duo-gray rounded-full overflow-hidden max-w-[100px]">
+                            <div
+                              className={`h-full rounded-full ${bestPct === 100 ? "bg-duo-gold" : "bg-duo-green"}`}
+                              style={{ width: `${bestPct}%` }}
+                            />
+                          </div>
+                          <span className={`text-xs font-bold ${bestPct === 100 ? "text-duo-gold" : "text-duo-green"}`}>
+                            {best.score}/{best.total}
+                          </span>
+                        </div>
                       )}
                     </div>
-                    <span className="text-duo-gray-dark text-2xl">←</span>
+                    <span className="text-duo-gray-dark text-2xl group-hover:translate-x-[-4px] transition-transform">←</span>
                   </div>
                 </button>
               );
@@ -232,7 +285,7 @@ export default function Quiz() {
 
           {/* Stats footer */}
           {currentPlayer.quizzes_completed > 0 && (
-            <div className="mt-6 flex justify-center gap-6 text-sm text-duo-gray-dark font-semibold">
+            <div className="mt-6 flex justify-center gap-6 text-sm text-duo-gray-dark font-semibold animate-fade-in">
               <span>🏆 {currentPlayer.quizzes_completed} חידונים</span>
               <span>🔥 רצף שיא: {currentPlayer.best_streak}</span>
             </div>
@@ -308,12 +361,15 @@ export default function Quiz() {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4 py-10" dir="rtl">
         <div className="max-w-md w-full text-center animate-pop-in">
-          <div className="text-8xl mb-4">💔</div>
+          <div className="text-8xl mb-4 animate-bounce-in">💔</div>
           <h1 className="text-4xl font-extrabold text-duo-red mb-2">
             נגמרו הלבבות!
           </h1>
-          <p className="text-lg text-duo-gray-dark font-semibold mb-6">
+          <p className="text-lg text-duo-gray-dark font-semibold mb-2">
             ענית נכון על {score} מתוך {currentIndex} שאלות
+          </p>
+          <p className="text-sm text-duo-gray-dark mb-6">
+            אל תוותרו — נסו שוב!
           </p>
 
           <div className="bg-gray-50 rounded-3xl p-6 mb-6 border-2 border-duo-gray">
@@ -323,7 +379,7 @@ export default function Quiz() {
 
           <button
             onClick={resetQuiz}
-            className="w-full py-4 rounded-2xl bg-duo-green text-white font-bold text-lg mb-3 transition-all hover:bg-duo-green-dark active:brightness-90 cursor-pointer"
+            className="w-full py-4 rounded-2xl border-2 border-b-4 border-duo-green bg-duo-green text-white font-bold text-lg mb-3 transition-all hover:bg-duo-green-dark active:border-b-2 active:mt-[2px] cursor-pointer"
           >
             🔄 נסה שוב
           </button>
@@ -353,6 +409,8 @@ export default function Quiz() {
     );
   }
 
+  const staggerClasses = ["animate-stagger-1", "animate-stagger-2", "animate-stagger-3", "animate-stagger-4"];
+
   return (
     <div className="flex flex-col min-h-screen bg-white" dir="rtl">
       {/* Top Bar */}
@@ -380,10 +438,12 @@ export default function Quiz() {
               {heartDisplay}
             </div>
 
-            {/* Progress Bar */}
+            {/* Progress Bar — Duolingo style with shimmer */}
             <div className="flex-1 h-4 bg-duo-gray rounded-full overflow-hidden">
               <div
-                className="h-full bg-duo-green rounded-full transition-all duration-500 ease-out relative"
+                className={`h-full rounded-full transition-all duration-500 ease-out relative ${
+                  progress > 0 ? "progress-shimmer" : "bg-duo-green"
+                }`}
                 style={{ width: `${progress}%` }}
               >
                 {progress > 8 && (
@@ -392,13 +452,18 @@ export default function Quiz() {
               </div>
             </div>
 
-            {/* XP */}
+            {/* XP with floating animation */}
             <div className="flex items-center gap-1 text-duo-gold font-bold text-base shrink-0 relative">
               <span>⚡</span>
               <span>{xp}</span>
               {showStreakBonus && (
-                <span className="absolute -top-5 right-0 text-xs text-duo-gold font-bold animate-confetti">
+                <span className="absolute -top-5 right-0 text-xs text-duo-gold font-bold animate-float-up">
                   +{streak >= 3 ? 10 : 5}
+                </span>
+              )}
+              {floatingXp && (
+                <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-sm text-duo-gold font-extrabold animate-float-up">
+                  +{floatingXp}
                 </span>
               )}
             </div>
@@ -409,23 +474,27 @@ export default function Quiz() {
       {/* Question Area */}
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 max-w-2xl mx-auto w-full">
         {/* Question Counter */}
-        <div className="text-duo-gray-dark text-sm font-semibold mb-2 tracking-wide">
+        <div className="text-duo-gray-dark text-sm font-semibold mb-2 tracking-wide animate-fade-in">
           שאלה {currentIndex + 1} מתוך {total}
         </div>
 
         {/* Streak indicator */}
         {streak >= 2 && !answered && (
-          <div className="text-duo-gold text-sm font-bold mb-2 animate-pop-in">
-            🔥 רצף של {streak}! {streak >= 3 ? "+10" : "+5"} בונוס XP
+          <div className="text-duo-gold text-sm font-bold mb-2 animate-bounce-in flex items-center gap-1">
+            <span className="animate-pulse-slow">🔥</span>
+            רצף של {streak}! {streak >= 3 ? "+10" : "+5"} בונוס XP
           </div>
         )}
 
         {/* Question */}
-        <h2 className="text-2xl md:text-3xl font-bold text-center text-foreground mb-8 leading-relaxed animate-fade-in">
+        <h2
+          key={`q-${questionKey}`}
+          className="text-2xl md:text-3xl font-bold text-center text-foreground mb-8 leading-relaxed animate-fade-in-up"
+        >
           {question.question}
         </h2>
 
-        {/* Choices */}
+        {/* Choices — staggered entry */}
         <div className="grid grid-cols-1 gap-3 w-full">
           {shuffledChoices.length > 0 && shuffledChoices.map((choice, displayIndex) => {
             const i = choice.originalIndex;
@@ -436,7 +505,7 @@ export default function Quiz() {
               btnClass +=
                 "border-duo-gray hover:border-duo-green hover:bg-duo-green-light active:border-b-2 active:mt-[2px] bg-white text-foreground";
             } else if (i === question.correctIndex) {
-              btnClass += "border-duo-green bg-duo-green-light text-duo-green-dark";
+              btnClass += "border-duo-green bg-duo-green-light text-duo-green-dark animate-correct-flash";
             } else if (i === selected && !isCorrect) {
               btnClass += "border-duo-red bg-duo-red-light text-duo-red animate-shake";
             } else {
@@ -447,14 +516,20 @@ export default function Quiz() {
 
             return (
               <button
-                key={i}
+                key={`${questionKey}-${i}`}
                 onClick={() => handleSelect(i)}
                 disabled={answered}
-                className={btnClass}
+                className={`${btnClass} ${staggerClasses[displayIndex] || ""}`}
               >
                 <span className="inline-flex items-center gap-3">
-                  <span className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center text-base font-bold text-duo-gray-dark shrink-0">
-                    {letterLabels[displayIndex]}
+                  <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-base font-bold shrink-0 transition-colors ${
+                    answered && i === question.correctIndex
+                      ? "bg-duo-green text-white"
+                      : answered && i === selected && !isCorrect
+                      ? "bg-duo-red text-white"
+                      : "bg-gray-100 text-duo-gray-dark"
+                  }`}>
+                    {answered && i === question.correctIndex ? "✓" : answered && i === selected && !isCorrect ? "✕" : letterLabels[displayIndex]}
                   </span>
                   <span className="leading-relaxed">{choice.text}</span>
                 </span>
@@ -473,20 +548,14 @@ export default function Quiz() {
         >
           <div className="max-w-2xl mx-auto p-5 md:p-6">
             <div className="flex items-start gap-3 mb-3">
-              <span className="text-3xl">{isCorrect ? "🎉" : "😔"}</span>
+              <span className="text-3xl animate-bounce-in">{feedbackEmoji}</span>
               <div>
                 <h3
                   className={`text-xl font-bold ${
                     isCorrect ? "text-duo-green-dark" : "text-duo-red"
                   }`}
                 >
-                  {isCorrect
-                    ? streak >= 3
-                      ? "מדהים! 🔥🔥🔥"
-                      : streak >= 2
-                      ? "נכון! 🔥"
-                      : "נכון!"
-                    : "לא נכון"}
+                  {feedbackMsg}
                 </h3>
                 {!isCorrect && (
                   <p className="text-duo-red text-sm font-semibold mt-0.5">
@@ -513,13 +582,13 @@ export default function Quiz() {
 
             <button
               onClick={handleNext}
-              className={`w-full py-4 rounded-2xl text-white font-bold text-lg transition-all active:brightness-90 cursor-pointer ${
+              className={`w-full py-4 rounded-2xl border-2 border-b-4 text-white font-bold text-lg transition-all active:border-b-2 active:mt-[2px] cursor-pointer ${
                 isCorrect
-                  ? "bg-duo-green hover:bg-duo-green-dark"
-                  : "bg-duo-red hover:brightness-90"
+                  ? "bg-duo-green border-duo-green-dark hover:bg-duo-green-dark"
+                  : "bg-duo-red border-[#e04343] hover:brightness-90"
               }`}
             >
-              {currentIndex + 1 >= total ? "לתוצאות" : "המשך"}
+              {currentIndex + 1 >= total ? "🎯 לתוצאות" : "המשך →"}
             </button>
           </div>
         </div>

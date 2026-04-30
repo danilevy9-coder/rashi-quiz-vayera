@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { type Player, saveQuizAttempt, updatePlayerStats, updatePlayerBestStreak } from "../lib/supabase";
+import { getLevelForXp, getXpProgress } from "../lib/levels";
+import { playSound } from "../lib/sounds";
 
 interface ResultsProps {
   score: number;
@@ -9,8 +12,11 @@ interface ResultsProps {
   parsha: string;
   partTitle: string;
   partId: number;
+  maxStreak: number;
+  player: Player;
   onRestart: () => void;
   onHome: () => void;
+  onSaved: (updatedPlayer: Player) => void;
 }
 
 function getGrade(score: number, total: number) {
@@ -62,13 +68,78 @@ export default function Results({
   parsha,
   partTitle,
   partId,
+  maxStreak,
+  player,
   onRestart,
   onHome,
+  onSaved,
 }: ResultsProps) {
   const [copied, setCopied] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [leveledUp, setLeveledUp] = useState(false);
+  const [newLevelEmoji, setNewLevelEmoji] = useState("");
+  const [newLevelTitle, setNewLevelTitle] = useState("");
+  const savedRef = useRef(false);
+
   const grade = getGrade(score, total);
   const pct = Math.round((score / total) * 100);
+
+  // Save results to Supabase (once)
+  useEffect(() => {
+    if (savedRef.current) return;
+    savedRef.current = true;
+
+    async function save() {
+      try {
+        // Calculate new totals
+        const newTotalXp = player.total_xp + xp;
+        const oldLevel = getLevelForXp(player.total_xp);
+        const newLevel = getLevelForXp(newTotalXp);
+
+        // Check for level up
+        if (newLevel.level > oldLevel.level) {
+          setLeveledUp(true);
+          setNewLevelEmoji(newLevel.emoji);
+          setNewLevelTitle(newLevel.title);
+          setTimeout(() => playSound("levelup"), 500);
+        } else if (pct === 100) {
+          playSound("perfect");
+        }
+
+        // Save quiz attempt
+        await saveQuizAttempt({
+          player_id: player.id,
+          part_id: partId,
+          score,
+          total_questions: total,
+          xp_earned: xp,
+          hearts_remaining: 0,
+          max_streak: maxStreak,
+        });
+
+        // Update player stats
+        await updatePlayerStats(player.id, xp, newLevel.level);
+
+        // Update best streak
+        if (maxStreak > 0) {
+          await updatePlayerBestStreak(player.id, maxStreak);
+        }
+
+        // Notify parent with updated player
+        onSaved({
+          ...player,
+          total_xp: newTotalXp,
+          level: newLevel.level,
+          quizzes_completed: player.quizzes_completed + 1,
+          best_streak: Math.max(player.best_streak, maxStreak),
+        });
+      } catch (err) {
+        console.error("Failed to save results:", err);
+      }
+    }
+
+    save();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (pct >= 70) {
@@ -78,7 +149,10 @@ export default function Results({
     }
   }, [pct]);
 
-  const shareText = `📖 שלטתי בפרשת ${parsha} (${partTitle})!\n${score}/${total} תשובות נכונות (${pct}%) — ${xp} XP!\n\nמי יכול לנצח את הציון שלי? 🔥`;
+  const newTotalXp = player.total_xp + xp;
+  const xpInfo = getXpProgress(newTotalXp);
+
+  const shareText = `📖 שלטתי בפרשת ${parsha} (${partTitle})!\n${score}/${total} תשובות נכונות (${pct}%) — ${xp} XP!\n${xpInfo.current.emoji} רמה ${xpInfo.current.level}: ${xpInfo.current.title}\n\nמי יכול לנצח את הציון שלי? 🔥`;
 
   const handleShare = async () => {
     if (navigator.share) {
@@ -113,6 +187,15 @@ export default function Results({
       )}
 
       <div className="max-w-md w-full text-center animate-pop-in relative z-10">
+        {/* Level Up Banner */}
+        {leveledUp && (
+          <div className="mb-6 bg-duo-gold/20 rounded-2xl p-5 border-2 border-duo-gold animate-pop-in">
+            <div className="text-5xl mb-2">{newLevelEmoji}</div>
+            <p className="text-xl font-extrabold text-duo-gold">עלית רמה!</p>
+            <p className="text-lg font-bold text-foreground">{newLevelTitle}</p>
+          </div>
+        )}
+
         {/* Trophy */}
         <div className="text-8xl mb-4">{grade.emoji}</div>
 
@@ -145,7 +228,38 @@ export default function Results({
               <p className="text-2xl font-bold text-duo-green">{pct}%</p>
               <p className="text-xs text-duo-gray-dark font-semibold">דיוק</p>
             </div>
+            {maxStreak >= 2 && (
+              <div className="text-center">
+                <p className="text-2xl font-bold text-duo-red">🔥 {maxStreak}</p>
+                <p className="text-xs text-duo-gray-dark font-semibold">רצף שיא</p>
+              </div>
+            )}
           </div>
+        </div>
+
+        {/* XP Progress */}
+        <div className="bg-duo-gold/10 rounded-2xl p-4 mb-6 border-2 border-duo-gold/30">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <span className="text-lg">{xpInfo.current.emoji}</span>
+            <span className="font-bold text-foreground">{xpInfo.current.title}</span>
+            <span className="text-sm text-duo-gray-dark">• רמה {xpInfo.current.level}</span>
+          </div>
+          {xpInfo.next && (
+            <>
+              <div className="h-3 bg-duo-gray rounded-full overflow-hidden mb-1">
+                <div
+                  className="h-full bg-duo-gold rounded-full transition-all duration-1000"
+                  style={{ width: `${xpInfo.progressPct}%` }}
+                />
+              </div>
+              <p className="text-xs text-duo-gray-dark">
+                ⚡ {newTotalXp} XP — עוד {xpInfo.xpNeeded - xpInfo.xpInLevel} עד {xpInfo.next.emoji} {xpInfo.next.title}
+              </p>
+            </>
+          )}
+          {!xpInfo.next && (
+            <p className="text-sm font-bold text-duo-gold">⚡ {newTotalXp} XP — רמה מקסימלית!</p>
+          )}
         </div>
 
         {/* Share Button */}
@@ -156,7 +270,6 @@ export default function Results({
           {copied ? "✓ הועתק ללוח!" : "📤 שתפי תוצאה"}
         </button>
 
-        {/* Challenge text */}
         <p className="text-sm text-duo-gray-dark mb-6 italic">
           שלחי לחברה — בואו נראה מי מקבלת ציון יותר גבוה!
         </p>

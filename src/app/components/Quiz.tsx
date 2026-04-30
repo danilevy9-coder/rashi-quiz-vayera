@@ -3,10 +3,16 @@
 import { useState, useCallback, useEffect } from "react";
 import { parts, type QuizPart } from "../quizData";
 import { summaries } from "../quizData/summaries";
+import { type Player, getPlayerBestScores, saveQuizAttempt, updatePlayerStats, updatePlayerBestStreak } from "../lib/supabase";
+import { getLevelForXp, getXpProgress } from "../lib/levels";
+import { playSound, preloadSounds } from "../lib/sounds";
 import Results from "./Results";
 import StudyScreen from "./StudyScreen";
+import PlayerSelect from "./PlayerSelect";
 
 export default function Quiz() {
+  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
+  const [bestScores, setBestScores] = useState<Record<number, { score: number; total: number }>>({});
   const [selectedPart, setSelectedPart] = useState<QuizPart | null>(null);
   const [showStudy, setShowStudy] = useState(false);
   const [quizStarted, setQuizStarted] = useState(false);
@@ -18,6 +24,7 @@ export default function Quiz() {
   const [answered, setAnswered] = useState(false);
   const [finished, setFinished] = useState(false);
   const [streak, setStreak] = useState(0);
+  const [maxStreak, setMaxStreak] = useState(0);
   const [showStreakBonus, setShowStreakBonus] = useState(false);
   const [shuffledChoices, setShuffledChoices] = useState<
     { text: string; originalIndex: number }[]
@@ -28,11 +35,24 @@ export default function Quiz() {
   const question = questions[currentIndex];
   const progress = total > 0 ? ((currentIndex + (answered ? 1 : 0)) / total) * 100 : 0;
 
+  // Preload sounds on mount
+  useEffect(() => {
+    preloadSounds();
+  }, []);
+
+  // Load best scores when player is selected
+  useEffect(() => {
+    if (currentPlayer) {
+      getPlayerBestScores(currentPlayer.id)
+        .then(setBestScores)
+        .catch(() => {});
+    }
+  }, [currentPlayer]);
+
   // Shuffle choices when question changes
   useEffect(() => {
     if (!question) return;
     const choices = question.choices.map((text, i) => ({ text, originalIndex: i }));
-    // Fisher-Yates shuffle
     for (let i = choices.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [choices[i], choices[j]] = [choices[j], choices[i]];
@@ -52,6 +72,15 @@ export default function Quiz() {
         setScore((s) => s + 1);
         setXp((x) => x + 10 + streakBonus);
         setStreak(newStreak);
+        setMaxStreak((m) => Math.max(m, newStreak));
+
+        // Play sound — streak sound if on a streak, otherwise correct
+        if (newStreak >= 3) {
+          playSound("streak");
+        } else {
+          playSound("correct");
+        }
+
         if (streakBonus > 0) {
           setShowStreakBonus(true);
           setTimeout(() => setShowStreakBonus(false), 1200);
@@ -59,6 +88,7 @@ export default function Quiz() {
       } else {
         setHearts((h) => Math.max(0, h - 1));
         setStreak(0);
+        playSound("wrong");
       }
     },
     [answered, question?.correctIndex, streak]
@@ -67,6 +97,7 @@ export default function Quiz() {
   const handleNext = useCallback(() => {
     if (currentIndex + 1 >= total) {
       setFinished(true);
+      playSound("complete");
     } else {
       setCurrentIndex((i) => i + 1);
       setSelected(null);
@@ -83,16 +114,65 @@ export default function Quiz() {
     setAnswered(false);
     setFinished(false);
     setStreak(0);
+    setMaxStreak(0);
     setShowStreakBonus(false);
     setQuizStarted(false);
     setShowStudy(false);
   }, []);
 
+  // Player Selection Screen
+  if (!currentPlayer) {
+    return <PlayerSelect onSelectPlayer={(p) => setCurrentPlayer(p)} />;
+  }
+
   // Part Selection Screen
   if (!selectedPart) {
+    const xpInfo = getXpProgress(currentPlayer.total_xp);
+
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4 py-10" dir="rtl">
         <div className="max-w-lg w-full text-center animate-fade-in">
+          {/* Player header */}
+          <div className="flex items-center justify-between mb-6 bg-gray-50 rounded-2xl p-4 border-2 border-duo-gray">
+            <div className="flex items-center gap-3 text-right">
+              <span className="text-3xl">{currentPlayer.avatar_emoji}</span>
+              <div>
+                <p className="text-lg font-bold text-foreground">{currentPlayer.name}</p>
+                <p className="text-sm text-duo-gray-dark">
+                  {xpInfo.current.emoji} {xpInfo.current.title} • ⚡ {currentPlayer.total_xp} XP
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setCurrentPlayer(null);
+                setBestScores({});
+              }}
+              className="text-sm text-duo-gray-dark hover:text-foreground font-semibold cursor-pointer"
+            >
+              החלף שחקן
+            </button>
+          </div>
+
+          {/* Level progress */}
+          {xpInfo.next && (
+            <div className="mb-6 bg-duo-gold/10 rounded-2xl p-4 border-2 border-duo-gold/30">
+              <div className="flex justify-between text-sm font-bold mb-1">
+                <span className="text-duo-gold">{xpInfo.current.emoji} רמה {xpInfo.current.level}</span>
+                <span className="text-duo-gray-dark">{xpInfo.next.emoji} רמה {xpInfo.next.level}</span>
+              </div>
+              <div className="h-3 bg-duo-gray rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-duo-gold rounded-full transition-all duration-500"
+                  style={{ width: `${xpInfo.progressPct}%` }}
+                />
+              </div>
+              <p className="text-xs text-duo-gray-dark mt-1">
+                {xpInfo.xpNeeded - xpInfo.xpInLevel} XP עד לרמה הבאה
+              </p>
+            </div>
+          )}
+
           <div className="text-6xl mb-4">📖</div>
           <h1 className="text-4xl md:text-5xl font-extrabold text-foreground mb-2">
             חידון רש&quot;י
@@ -105,33 +185,57 @@ export default function Quiz() {
           </p>
 
           <div className="grid grid-cols-1 gap-3">
-            {parts.map((part) => (
-              <button
-                key={part.partId}
-                onClick={() => {
-                  setSelectedPart(part);
-                  setShowStudy(true);
-                  setQuizStarted(false);
-                }}
-                className="w-full text-right p-5 rounded-2xl border-2 border-b-4 border-duo-gray bg-white hover:border-duo-green hover:bg-duo-green-light active:border-b-2 active:mt-[2px] transition-all cursor-pointer group"
-              >
-                <div className="flex items-center gap-4">
-                  <span className="w-12 h-12 rounded-xl bg-duo-green text-white flex items-center justify-center text-xl font-bold shrink-0 group-hover:scale-110 transition-transform">
-                    {part.partId}
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-lg font-bold text-foreground">
-                      {part.partTitle}
-                    </p>
-                    <p className="text-sm text-duo-gray-dark">
-                      {part.partSubtitle}
-                    </p>
+            {parts.map((part) => {
+              const best = bestScores[part.partId];
+              const bestPct = best ? Math.round((best.score / best.total) * 100) : null;
+
+              return (
+                <button
+                  key={part.partId}
+                  onClick={() => {
+                    setSelectedPart(part);
+                    setShowStudy(true);
+                    setQuizStarted(false);
+                  }}
+                  className="w-full text-right p-5 rounded-2xl border-2 border-b-4 border-duo-gray bg-white hover:border-duo-green hover:bg-duo-green-light active:border-b-2 active:mt-[2px] transition-all cursor-pointer group"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className={`w-12 h-12 rounded-xl text-white flex items-center justify-center text-xl font-bold shrink-0 group-hover:scale-110 transition-transform ${
+                      bestPct === 100
+                        ? "bg-duo-gold"
+                        : bestPct && bestPct >= 70
+                        ? "bg-duo-green"
+                        : "bg-duo-blue"
+                    }`}>
+                      {bestPct === 100 ? "👑" : part.partId}
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-lg font-bold text-foreground">
+                        {part.partTitle}
+                      </p>
+                      <p className="text-sm text-duo-gray-dark">
+                        {part.partSubtitle}
+                      </p>
+                      {best && (
+                        <p className="text-xs font-bold mt-1 text-duo-green">
+                          שיא: {best.score}/{best.total} ({bestPct}%)
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-duo-gray-dark text-2xl">←</span>
                   </div>
-                  <span className="text-duo-gray-dark text-2xl">←</span>
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
+
+          {/* Stats footer */}
+          {currentPlayer.quizzes_completed > 0 && (
+            <div className="mt-6 flex justify-center gap-6 text-sm text-duo-gray-dark font-semibold">
+              <span>🏆 {currentPlayer.quizzes_completed} חידונים</span>
+              <span>🔥 רצף שיא: {currentPlayer.best_streak}</span>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -157,6 +261,7 @@ export default function Quiz() {
             setAnswered(false);
             setFinished(false);
             setStreak(0);
+            setMaxStreak(0);
             setShowStreakBonus(false);
           }}
           onBack={() => {
@@ -178,10 +283,18 @@ export default function Quiz() {
         parsha="וירא"
         partTitle={selectedPart.partTitle}
         partId={selectedPart.partId}
+        maxStreak={maxStreak}
+        player={currentPlayer}
         onRestart={resetQuiz}
         onHome={() => {
           setSelectedPart(null);
           resetQuiz();
+        }}
+        onSaved={(updatedPlayer) => {
+          setCurrentPlayer(updatedPlayer);
+          getPlayerBestScores(updatedPlayer.id)
+            .then(setBestScores)
+            .catch(() => {});
         }}
       />
     );

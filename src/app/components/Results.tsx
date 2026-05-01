@@ -6,7 +6,7 @@ import { getLevelForXp, getXpProgress } from "../lib/levels";
 import { playSound } from "../lib/sounds";
 
 interface ResultsProps {
-  score: number;
+  score: number; // first-try correct count
   total: number;
   xp: number;
   parsha: string;
@@ -15,22 +15,23 @@ interface ResultsProps {
   maxStreak: number;
   durationSeconds: number;
   player: Player;
+  totalAttempts: number;
   onRestart: () => void;
   onHome: () => void;
   onSaved: (updatedPlayer: Player) => void;
 }
 
-function getGrade(score: number, total: number) {
-  const pct = (score / total) * 100;
+function getGrade(firstTryCorrect: number, total: number) {
+  const pct = (firstTryCorrect / total) * 100;
   if (pct === 100)
-    return { emoji: "👑", title: "!מושלם", subtitle: "!את מלכת הרש\"י" };
+    return { emoji: "👑", title: "!מושלם", subtitle: "כל התשובות נכונות בפעם הראשונה!" };
   if (pct >= 90)
     return { emoji: "🌟", title: "!מדהים", subtitle: "!רש\"י היה גאה" };
   if (pct >= 70)
-    return { emoji: "💪", title: "!כל הכבוד", subtitle: "!את באמת יודעת את זה" };
+    return { emoji: "💪", title: "!כל הכבוד", subtitle: "!שליטה מצוינת" };
   if (pct >= 50)
-    return { emoji: "📚", title: "!מאמץ יפה", subtitle: "!המשיכי ללמוד — את בדרך" };
-  return { emoji: "🔄", title: "!המשיכי ללמוד", subtitle: "!חזרי על הפרשה ונסי שוב" };
+    return { emoji: "📚", title: "!יפה מאוד", subtitle: "!ההתמדה משתלמת" };
+  return { emoji: "🌱", title: "!כל הכבוד שסיימתם", subtitle: "!חזרו ותשתפרו" };
 }
 
 function ConfettiParticle({ delay, left }: { delay: number; left: number }) {
@@ -72,6 +73,7 @@ export default function Results({
   maxStreak,
   durationSeconds,
   player,
+  totalAttempts,
   onRestart,
   onHome,
   onSaved,
@@ -84,7 +86,8 @@ export default function Results({
   const savedRef = useRef(false);
 
   const grade = getGrade(score, total);
-  const pct = Math.round((score / total) * 100);
+  const firstTryPct = Math.round((score / total) * 100);
+  const retries = totalAttempts - total;
 
   // Save results to Supabase (once)
   useEffect(() => {
@@ -93,22 +96,19 @@ export default function Results({
 
     async function save() {
       try {
-        // Calculate new totals
         const newTotalXp = player.total_xp + xp;
         const oldLevel = getLevelForXp(player.total_xp);
         const newLevel = getLevelForXp(newTotalXp);
 
-        // Check for level up
         if (newLevel.level > oldLevel.level) {
           setLeveledUp(true);
           setNewLevelEmoji(newLevel.emoji);
           setNewLevelTitle(newLevel.title);
           setTimeout(() => playSound("levelup"), 500);
-        } else if (pct === 100) {
+        } else if (firstTryPct === 100) {
           playSound("perfect");
         }
 
-        // Save quiz attempt
         await saveQuizAttempt({
           player_id: player.id,
           part_id: partId,
@@ -120,15 +120,12 @@ export default function Results({
           duration_seconds: durationSeconds,
         });
 
-        // Update player stats
         await updatePlayerStats(player.id, xp, newLevel.level);
 
-        // Update best streak
         if (maxStreak > 0) {
           await updatePlayerBestStreak(player.id, maxStreak);
         }
 
-        // Notify parent with updated player
         onSaved({
           ...player,
           total_xp: newTotalXp,
@@ -145,17 +142,15 @@ export default function Results({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (pct >= 70) {
-      setShowConfetti(true);
-      const timer = setTimeout(() => setShowConfetti(false), 2500);
-      return () => clearTimeout(timer);
-    }
-  }, [pct]);
+    setShowConfetti(true);
+    const timer = setTimeout(() => setShowConfetti(false), 2500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const newTotalXp = player.total_xp + xp;
   const xpInfo = getXpProgress(newTotalXp);
 
-  const shareText = `📖 שלטתי בפרשת ${parsha} (${partTitle})!\n${score}/${total} תשובות נכונות (${pct}%) — ${xp} XP!\n${xpInfo.current.emoji} רמה ${xpInfo.current.level}: ${xpInfo.current.title}\n\nמי יכול לנצח את הציון שלי? 🔥`;
+  const shareText = `📖 שלטתי בפרשת ${parsha} (${partTitle})!\n${total}/${total} שאלות נשלטו • ${score}/${total} נכון בפעם הראשונה (${firstTryPct}%)\n⚡ ${xp} XP • ${xpInfo.current.emoji} רמה ${xpInfo.current.level}: ${xpInfo.current.title}\n\nמי יכול לנצח את הציון שלי? 🔥`;
 
   const handleShare = async () => {
     if (navigator.share) {
@@ -180,11 +175,7 @@ export default function Results({
       {showConfetti && (
         <div className="fixed inset-0 pointer-events-none z-50">
           {Array.from({ length: 30 }).map((_, i) => (
-            <ConfettiParticle
-              key={i}
-              delay={i * 60}
-              left={5 + Math.random() * 90}
-            />
+            <ConfettiParticle key={i} delay={i * 60} left={5 + Math.random() * 90} />
           ))}
         </div>
       )}
@@ -203,34 +194,34 @@ export default function Results({
         <div className="text-8xl mb-4">{grade.emoji}</div>
 
         {/* Title */}
-        <h1 className="text-4xl md:text-5xl font-extrabold text-foreground mb-2">
-          {grade.title}
-        </h1>
-        <p className="text-lg text-duo-gray-dark font-semibold mb-8">
-          {grade.subtitle}
-        </p>
+        <h1 className="text-4xl md:text-5xl font-extrabold text-foreground mb-2">{grade.title}</h1>
+        <p className="text-lg text-duo-gray-dark font-semibold mb-8">{grade.subtitle}</p>
 
         {/* Score Card */}
         <div className="bg-gray-50 rounded-3xl p-6 mb-6 border-2 border-duo-gray">
           <p className="text-duo-gray-dark text-sm font-semibold tracking-wide mb-1">
-            פרשת {parsha} • חלק {partId}: {partTitle}
+            פרשת {parsha} • {partId <= 5 ? `חלק ${partId}: ` : ""}{partTitle}
           </p>
-          <p className="text-5xl font-extrabold text-foreground mb-1">
-            {score}/{total}
+          <p className="text-5xl font-extrabold text-duo-green mb-1">
+            {total}/{total} ✓
           </p>
-          <p className="text-lg text-duo-gray-dark font-semibold">
-            תשובות נכונות
-          </p>
+          <p className="text-lg text-duo-gray-dark font-semibold">שאלות נשלטו</p>
 
-          <div className="flex justify-center gap-6 mt-4 pt-4 border-t border-duo-gray">
+          <div className="flex justify-center gap-5 mt-4 pt-4 border-t border-duo-gray flex-wrap">
             <div className="text-center">
               <p className="text-2xl font-bold text-duo-gold">⚡ {xp}</p>
               <p className="text-xs text-duo-gray-dark font-semibold">XP שנצברו</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-duo-green">{pct}%</p>
-              <p className="text-xs text-duo-gray-dark font-semibold">דיוק</p>
+              <p className="text-2xl font-bold text-duo-blue">{score}/{total}</p>
+              <p className="text-xs text-duo-gray-dark font-semibold">נכון בפעם הראשונה</p>
             </div>
+            {retries > 0 && (
+              <div className="text-center">
+                <p className="text-2xl font-bold text-duo-purple">🔄 {retries}</p>
+                <p className="text-xs text-duo-gray-dark font-semibold">חזרות</p>
+              </div>
+            )}
             {maxStreak >= 2 && (
               <div className="text-center">
                 <p className="text-2xl font-bold text-duo-red">🔥 {maxStreak}</p>
@@ -238,7 +229,9 @@ export default function Results({
               </div>
             )}
             <div className="text-center">
-              <p className="text-2xl font-bold text-duo-blue">⏱ {Math.floor(durationSeconds / 60)}:{(durationSeconds % 60).toString().padStart(2, "0")}</p>
+              <p className="text-2xl font-bold text-duo-gray-dark">
+                ⏱ {Math.floor(durationSeconds / 60)}:{(durationSeconds % 60).toString().padStart(2, "0")}
+              </p>
               <p className="text-xs text-duo-gray-dark font-semibold">זמן</p>
             </div>
           </div>
@@ -260,7 +253,8 @@ export default function Results({
                 />
               </div>
               <p className="text-xs text-duo-gray-dark">
-                ⚡ {newTotalXp} XP — עוד {xpInfo.xpNeeded - xpInfo.xpInLevel} עד {xpInfo.next.emoji} {xpInfo.next.title}
+                ⚡ {newTotalXp} XP — עוד {xpInfo.xpNeeded - xpInfo.xpInLevel} עד {xpInfo.next.emoji}{" "}
+                {xpInfo.next.title}
               </p>
             </>
           )}

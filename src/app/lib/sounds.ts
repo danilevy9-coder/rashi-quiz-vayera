@@ -1,14 +1,14 @@
 // Sound effect system with variety — never plays the same sound twice in a row
 
-type SoundCategory = "correct" | "wrong" | "streak" | "levelup" | "perfect" | "complete";
+type SoundCategory = "correct" | "streak" | "levelup" | "perfect" | "complete" | "start";
 
 const SOUND_COUNTS: Record<SoundCategory, number> = {
   correct: 8,
-  wrong: 5,
   streak: 3,
   levelup: 2,
   perfect: 1,
   complete: 2,
+  start: 3,
 };
 
 // Track last played index per category to avoid repetition

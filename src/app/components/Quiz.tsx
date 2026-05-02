@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { parts, type QuizPart, type Question } from "../quizData";
+import { parts, parsha, type QuizPart, type Question } from "../quizData";
 import { summaries } from "../quizData/summaries";
 import { type Player, getPlayerBestScores } from "../lib/supabase";
 import { getXpProgress } from "../lib/levels";
@@ -314,7 +314,7 @@ export default function Quiz() {
           <h1 className="text-4xl md:text-5xl font-extrabold text-foreground mb-2 animate-fade-in-up">
             חידון רש&quot;י
           </h1>
-          <p className="text-xl text-duo-gray-dark font-semibold mb-2">פרשת וירא</p>
+          <p className="text-xl text-duo-gray-dark font-semibold mb-2">פרשת {parsha}</p>
           <p className="text-base text-duo-gray-dark mb-8">
             בחרו חלק להתחיל • שלטו בכל השאלות
           </p>
@@ -460,7 +460,7 @@ export default function Quiz() {
         score={firstTryCorrect}
         total={total}
         xp={xp}
-        parsha="וירא"
+        parsha={parsha}
         partTitle={selectedPart.partTitle}
         partId={selectedPart.partId}
         maxStreak={maxStreak}

@@ -8,8 +8,8 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Rashi Quiz — Parshat Vayera",
-  description: "Test your knowledge of Rashi's commentary on Parshat Vayera",
+  title: "Rashi Quiz — Parshat Chayei Sarah",
+  description: "Test your knowledge of Rashi's commentary on Parshat Chayei Sarah",
 };
 
 export default function RootLayout({

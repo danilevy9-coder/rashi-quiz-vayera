@@ -1,8 +1,8 @@
-import part1 from "./part1.json";
-import part2 from "./part2.json";
-import part3 from "./part3.json";
-import part4 from "./part4.json";
-import part5 from "./part5.json";
+import part1 from "./chayei-sara-part1.json";
+import part2 from "./chayei-sara-part2.json";
+import part3 from "./chayei-sara-part3.json";
+import part4 from "./chayei-sara-part4.json";
+import part5 from "./chayei-sara-part5.json";
 
 export type Question = {
   id: number;
@@ -27,4 +27,4 @@ export const parts: QuizPart[] = [
   part5 as QuizPart,
 ];
 
-export const parsha = "וירא";
+export const parsha = "חיי שרה";

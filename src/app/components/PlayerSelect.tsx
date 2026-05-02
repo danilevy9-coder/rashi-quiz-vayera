@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { getPlayers, createPlayer, type Player } from "../lib/supabase";
 import { getXpProgress } from "../lib/levels";
-import { parsha } from "../quizData";
 
 interface PlayerSelectProps {
   onSelectPlayer: (player: Player) => void;
@@ -74,7 +73,7 @@ export default function PlayerSelect({ onSelectPlayer }: PlayerSelectProps) {
           חידון רש&quot;י
         </h1>
         <p className="text-xl text-duo-gray-dark font-semibold mb-8">
-          פרשת {parsha}
+          בחרו שחקן כדי להתחיל
         </p>
 
         {!showNewPlayer ? (

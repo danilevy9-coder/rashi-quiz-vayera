@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { parts, parsha, type QuizPart, type Question } from "../quizData";
-import { summaries } from "../quizData/summaries";
+import { parshas, type Parsha, type QuizPart, type Question } from "../quizData";
+import { summariesByParsha } from "../quizData/summaries";
 import { type Player, getPlayerBestScores } from "../lib/supabase";
 import { getXpProgress } from "../lib/levels";
 import { playSound, preloadSounds } from "../lib/sounds";
@@ -48,7 +48,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 // Build a final quiz from all parts — different every time
-function buildFinalQuiz(count: number): QuizPart {
+function buildFinalQuiz(count: number, parts: QuizPart[]): QuizPart {
   const allQuestions: Question[] = [];
   for (const part of parts) {
     for (const q of part.questions) {
@@ -68,6 +68,7 @@ function buildFinalQuiz(count: number): QuizPart {
 export default function Quiz() {
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
   const [bestScores, setBestScores] = useState<Record<number, { score: number; total: number }>>({});
+  const [selectedParsha, setSelectedParsha] = useState<Parsha | null>(null);
   const [selectedPart, setSelectedPart] = useState<QuizPart | null>(null);
   const [showStudy, setShowStudy] = useState(false);
   const [quizStarted, setQuizStarted] = useState(false);
@@ -261,10 +262,9 @@ export default function Quiz() {
     return <PlayerSelect onSelectPlayer={(p) => setCurrentPlayer(p)} />;
   }
 
-  // Part Selection
-  if (!selectedPart) {
+  // Parsha Selection
+  if (!selectedParsha) {
     const xpInfo = getXpProgress(currentPlayer.total_xp);
-    const allPartsCompleted = parts.every((p) => bestScores[p.partId]);
 
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4 py-10" dir="rtl">
@@ -314,13 +314,82 @@ export default function Quiz() {
           <h1 className="text-4xl md:text-5xl font-extrabold text-foreground mb-2 animate-fade-in-up">
             חידון רש&quot;י
           </h1>
-          <p className="text-xl text-duo-gray-dark font-semibold mb-2">פרשת {parsha}</p>
+          <p className="text-base text-duo-gray-dark mb-8">
+            בחרו פרשה להתחיל
+          </p>
+
+          <div className="grid grid-cols-1 gap-3">
+            {parshas.map((p, idx) => (
+              <button
+                key={p.slug}
+                onClick={() => setSelectedParsha(p)}
+                className="w-full text-right p-5 rounded-2xl border-2 border-b-4 border-duo-gray bg-white hover:border-duo-green hover:bg-duo-green-light active:border-b-2 active:mt-[2px] transition-all cursor-pointer group animate-fade-in-up"
+                style={{ animationDelay: `${0.05 * (idx + 1)}s` }}
+              >
+                <div className="flex items-center gap-4">
+                  <span className="w-14 h-14 rounded-xl bg-duo-blue text-white flex items-center justify-center text-3xl font-bold shrink-0 group-hover:scale-110 transition-transform">
+                    {p.emoji}
+                  </span>
+                  <div className="flex-1">
+                    <p className="text-xl font-bold text-foreground">פרשת {p.name}</p>
+                    <p className="text-sm text-duo-gray-dark">{p.nameEn} • {p.parts.reduce((sum, pt) => sum + pt.questions.length, 0)} שאלות</p>
+                  </div>
+                  <span className="text-duo-gray-dark text-2xl group-hover:translate-x-[-4px] transition-transform">←</span>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Stats footer */}
+          {currentPlayer.quizzes_completed > 0 && (
+            <div className="mt-6 flex justify-center gap-6 text-sm text-duo-gray-dark font-semibold animate-fade-in">
+              <span>🏆 {currentPlayer.quizzes_completed} חידונים</span>
+              <span>🔥 רצף שיא: {currentPlayer.best_streak}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Part Selection
+  if (!selectedPart) {
+    const xpInfo = getXpProgress(currentPlayer.total_xp);
+    const allPartsCompleted = selectedParsha.parts.every((p) => bestScores[p.partId]);
+
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4 py-10" dir="rtl">
+        <div className="max-w-lg w-full text-center">
+          {/* Player header */}
+          <div className="flex items-center justify-between mb-6 bg-gray-50 rounded-2xl p-4 border-2 border-duo-gray animate-fade-in-up">
+            <div className="flex items-center gap-3 text-right">
+              <span className="text-3xl animate-bounce-in">{currentPlayer.avatar_emoji}</span>
+              <div>
+                <p className="text-lg font-bold text-foreground">{currentPlayer.name}</p>
+                <p className="text-sm text-duo-gray-dark">
+                  {xpInfo.current.emoji} {xpInfo.current.title} • ⚡ {currentPlayer.total_xp} XP
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedParsha(null)}
+              className="text-sm text-duo-gray-dark hover:text-foreground font-semibold cursor-pointer"
+            >
+              ← החלף פרשה
+            </button>
+          </div>
+
+          <div className="text-6xl mb-3 animate-bounce-in">📖</div>
+          <h1 className="text-4xl md:text-5xl font-extrabold text-foreground mb-2 animate-fade-in-up">
+            חידון רש&quot;י
+          </h1>
+          <p className="text-xl text-duo-gray-dark font-semibold mb-2">פרשת {selectedParsha.name}</p>
           <p className="text-base text-duo-gray-dark mb-8">
             בחרו חלק להתחיל • שלטו בכל השאלות
           </p>
 
           <div className="grid grid-cols-1 gap-3">
-            {parts.map((part, idx) => {
+            {selectedParsha.parts.map((part, idx) => {
               const best = bestScores[part.partId];
               const bestPct = best ? Math.round((best.score / best.total) * 100) : null;
 
@@ -374,7 +443,7 @@ export default function Quiz() {
             {allPartsCompleted && (
               <button
                 onClick={() => {
-                  const finalQuiz = buildFinalQuiz(30);
+                  const finalQuiz = buildFinalQuiz(30, selectedParsha.parts);
                   setSelectedPart(finalQuiz);
                   setShowStudy(false);
                   setQuizStarted(false);
@@ -410,11 +479,13 @@ export default function Quiz() {
 
   // Study Screen (regular parts 1-5)
   if (showStudy && !quizStarted) {
-    const summary = summaries.find((s) => s.partId === selectedPart.partId);
+    const parshaSummaries = summariesByParsha[selectedParsha.slug] ?? [];
+    const summary = parshaSummaries.find((s) => s.partId === selectedPart.partId);
     if (summary) {
       return (
         <StudyScreen
           summary={summary}
+          parshaSlug={selectedParsha.slug}
           partTitle={selectedPart.partTitle}
           partSubtitle={selectedPart.partSubtitle}
           onStartQuiz={startQuiz}
@@ -460,7 +531,7 @@ export default function Quiz() {
         score={firstTryCorrect}
         total={total}
         xp={xp}
-        parsha={parsha}
+        parsha={selectedParsha.name}
         partTitle={selectedPart.partTitle}
         partId={selectedPart.partId}
         maxStreak={maxStreak}

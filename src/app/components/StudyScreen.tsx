@@ -5,6 +5,7 @@ import type { PartSummary } from "../quizData/summaries";
 
 interface StudyScreenProps {
   summary: PartSummary;
+  parshaSlug: string;
   partTitle: string;
   partSubtitle: string;
   onStartQuiz: () => void;
@@ -13,6 +14,7 @@ interface StudyScreenProps {
 
 export default function StudyScreen({
   summary,
+  parshaSlug,
   partTitle,
   partSubtitle,
   onStartQuiz,
@@ -26,7 +28,7 @@ export default function StudyScreen({
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const text = lang === "hebrew" ? summary.hebrew : summary.english;
-  const audioSrc = `/audio/part${summary.partId}-${lang === "hebrew" ? "he" : "en"}.mp3`;
+  const audioSrc = `/audio/${parshaSlug}/part${summary.partId}-${lang === "hebrew" ? "he" : "en"}.mp3`;
 
   // Create / swap audio element when language or part changes
   useEffect(() => {

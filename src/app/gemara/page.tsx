@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { getDafimByPerek, getAllDafim, MASECHTA_NAME, MASECHTA_NAME_EN, TOTAL_DAFIM, type Perek, type Daf } from "./data/yevamos";
+import { getDafimByPerek, getAllDafim, MASECHTA_NAME, MASECHTA_NAME_EN, TOTAL_DAFIM, type Perek } from "./data/yevamos";
 import FlashcardSession from "./components/FlashcardSession";
+import GemaraQuiz from "./components/GemaraQuiz";
 import Link from "next/link";
 
 type Rating = "knew" | "partial" | "forgot";
+type ActiveMode = null | { type: "study" | "quiz"; scope: "all" | number }; // number = perek number
 
 const STORAGE_KEY = "gemara-flashcard-ratings";
 
@@ -35,26 +37,24 @@ function MasteryDot({ rating }: { rating?: Rating }) {
 function PerekCard({
   perek,
   ratings,
-  onSelect,
+  onStudy,
+  onQuiz,
 }: {
   perek: Perek;
   ratings: Record<number, Rating>;
-  onSelect: () => void;
+  onStudy: () => void;
+  onQuiz: () => void;
 }) {
   const total = perek.dafim.length;
   const knew = perek.dafim.filter((d) => ratings[d.dafNumber] === "knew").length;
   const partial = perek.dafim.filter((d) => ratings[d.dafNumber] === "partial").length;
   const forgot = perek.dafim.filter((d) => ratings[d.dafNumber] === "forgot").length;
   const reviewed = knew + partial + forgot;
-  const pct = total > 0 ? Math.round((knew / total) * 100) : 0;
 
   return (
-    <button
-      onClick={onSelect}
-      className="w-full text-right p-4 rounded-xl border-2 border-b-4 border-gray-200 bg-white hover:border-[#1a3a5c] active:border-b-2 active:mt-[2px] transition-all group"
-    >
-      <div className="flex items-center gap-3">
-        <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-[#1a3a5c] text-white flex items-center justify-center text-lg font-bold">
+    <div className="w-full p-4 rounded-xl border-2 border-gray-200 bg-white">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-[#1a3a5c] text-white flex items-center justify-center text-lg font-bold">
           {perek.number}
         </div>
         <div className="flex-1 min-w-0">
@@ -82,14 +82,27 @@ function PerekCard({
           )}
         </div>
       </div>
-    </button>
+      <div className="flex gap-2">
+        <button
+          onClick={onStudy}
+          className="flex-1 py-2.5 rounded-lg border-2 border-b-4 border-duo-gray bg-white text-gray-700 font-bold text-sm active:border-b-2 active:mt-[2px] transition-all"
+        >
+          Study
+        </button>
+        <button
+          onClick={onQuiz}
+          className="flex-1 py-2.5 rounded-lg border-2 border-b-4 border-duo-green bg-duo-green text-white font-bold text-sm active:border-b-2 active:mt-[2px] transition-all"
+        >
+          Quiz
+        </button>
+      </div>
+    </div>
   );
 }
 
 export default function GemaraPage() {
   const [ratings, setRatings] = useState<Record<number, Rating>>({});
-  const [selectedPerek, setSelectedPerek] = useState<Perek | null>(null);
-  const [studyAll, setStudyAll] = useState(false);
+  const [activeMode, setActiveMode] = useState<ActiveMode>(null);
   const [mounted, setMounted] = useState(false);
 
   const prakim = useMemo(() => getDafimByPerek(), []);
@@ -106,27 +119,38 @@ export default function GemaraPage() {
   };
 
   // Active session
-  if (selectedPerek) {
-    return (
-      <FlashcardSession
-        dafim={selectedPerek.dafim}
-        perek={selectedPerek}
-        title={`${selectedPerek.nameHebrew} · Perek ${selectedPerek.number}`}
-        onBack={() => setSelectedPerek(null)}
-        savedRatings={ratings}
-        onSaveRatings={handleSaveRatings}
-      />
-    );
-  }
+  if (activeMode) {
+    const dafim =
+      activeMode.scope === "all"
+        ? allDafim
+        : prakim.find((p) => p.number === activeMode.scope)?.dafim || [];
 
-  if (studyAll) {
+    const title =
+      activeMode.scope === "all"
+        ? `${MASECHTA_NAME} - All Dafim`
+        : (() => {
+            const p = prakim.find((pk) => pk.number === activeMode.scope);
+            return p ? `${p.nameHebrew} · Perek ${p.number}` : "";
+          })();
+
+    if (activeMode.type === "study") {
+      return (
+        <FlashcardSession
+          dafim={dafim}
+          title={title}
+          onBack={() => setActiveMode(null)}
+          savedRatings={ratings}
+          onSaveRatings={handleSaveRatings}
+        />
+      );
+    }
+
     return (
-      <FlashcardSession
-        dafim={allDafim}
-        title={`כל המסכת · ${MASECHTA_NAME}`}
-        onBack={() => setStudyAll(false)}
-        savedRatings={ratings}
-        onSaveRatings={handleSaveRatings}
+      <GemaraQuiz
+        dafim={dafim}
+        allDafim={allDafim}
+        title={title}
+        onBack={() => setActiveMode(null)}
       />
     );
   }
@@ -136,7 +160,6 @@ export default function GemaraPage() {
   const knew = Object.values(ratings).filter((r) => r === "knew").length;
   const partial = Object.values(ratings).filter((r) => r === "partial").length;
   const forgot = Object.values(ratings).filter((r) => r === "forgot").length;
-  const masteryPct = TOTAL_DAFIM > 0 ? Math.round((knew / TOTAL_DAFIM) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -151,7 +174,7 @@ export default function GemaraPage() {
               &larr;
             </Link>
             <div className="flex-1" />
-            <span className="text-sm text-white/60 font-medium">Zichru Flashcards</span>
+            <span className="text-sm text-white/60 font-medium">Zichru</span>
           </div>
           <div className="text-center">
             <h1 className="text-3xl font-bold mb-1" dir="rtl">
@@ -174,7 +197,6 @@ export default function GemaraPage() {
                 {totalRated}/{TOTAL_DAFIM} reviewed
               </span>
             </div>
-            {/* Progress bar */}
             <div className="w-full h-4 bg-gray-100 rounded-full overflow-hidden flex">
               {knew > 0 && (
                 <div
@@ -209,13 +231,21 @@ export default function GemaraPage() {
           </div>
         )}
 
-        {/* Study All button */}
-        <button
-          onClick={() => setStudyAll(true)}
-          className="w-full py-4 rounded-xl border-2 border-b-4 border-[#1a3a5c] bg-[#1a3a5c] text-white font-bold text-lg active:border-b-2 active:mt-[2px] transition-all"
-        >
-          Study All Dafim
-        </button>
+        {/* Top action buttons */}
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setActiveMode({ type: "study", scope: "all" })}
+            className="py-4 rounded-xl border-2 border-b-4 border-[#1a3a5c] bg-[#1a3a5c] text-white font-bold text-base active:border-b-2 active:mt-[2px] transition-all"
+          >
+            Study All
+          </button>
+          <button
+            onClick={() => setActiveMode({ type: "quiz", scope: "all" })}
+            className="py-4 rounded-xl border-2 border-b-4 border-duo-green bg-duo-green text-white font-bold text-base active:border-b-2 active:mt-[2px] transition-all"
+          >
+            Quiz All
+          </button>
+        </div>
 
         {/* Prakim list */}
         <div>
@@ -226,7 +256,8 @@ export default function GemaraPage() {
                 key={perek.number}
                 perek={perek}
                 ratings={ratings}
-                onSelect={() => setSelectedPerek(perek)}
+                onStudy={() => setActiveMode({ type: "study", scope: perek.number })}
+                onQuiz={() => setActiveMode({ type: "quiz", scope: perek.number })}
               />
             ))}
           </div>

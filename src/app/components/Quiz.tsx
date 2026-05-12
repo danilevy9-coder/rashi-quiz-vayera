@@ -340,6 +340,24 @@ export default function Quiz() {
             ))}
           </div>
 
+          {/* Gemara Flashcards link */}
+          <a
+            href="/gemara"
+            className="mt-6 w-full block p-5 rounded-2xl border-2 border-b-4 border-[#1a3a5c] bg-gradient-to-r from-[#1a3a5c] to-[#0d1f33] text-white hover:opacity-90 active:border-b-2 active:mt-[2px] transition-all cursor-pointer animate-fade-in-up"
+            style={{ animationDelay: "0.25s" }}
+          >
+            <div className="flex items-center gap-4" dir="ltr">
+              <span className="w-14 h-14 rounded-xl bg-white/15 flex items-center justify-center text-2xl font-bold shrink-0">
+                &#x1F0CF;
+              </span>
+              <div className="flex-1 text-left">
+                <p className="text-xl font-bold">Gemara Flashcards</p>
+                <p className="text-sm text-white/70">Yevamos &middot; Zichru Simanim</p>
+              </div>
+              <span className="text-white/70 text-2xl">&rarr;</span>
+            </div>
+          </a>
+
           {/* Stats footer */}
           {currentPlayer.quizzes_completed > 0 && (
             <div className="mt-6 flex justify-center gap-6 text-sm text-duo-gray-dark font-semibold animate-fade-in">

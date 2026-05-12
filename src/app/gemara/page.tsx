@@ -20,10 +20,12 @@ import FlashcardSession from "./components/FlashcardSession";
 import GemaraQuiz from "./components/GemaraQuiz";
 import MatchingGame from "./components/MatchingGame";
 import SequenceDrill from "./components/SequenceDrill";
+import SpeedRound from "./components/SpeedRound";
+import TrueFalseQuiz from "./components/TrueFalseQuiz";
 import Link from "next/link";
 
 type Rating = "knew" | "partial" | "forgot";
-type GameType = "study" | "quiz" | "matching" | "sequence";
+type GameType = "study" | "quiz" | "matching" | "sequence" | "speed" | "truefalse";
 type ActiveMode = null | { type: GameType; scope: "all" | number };
 type MasechtaId = "yevamos" | "succah";
 
@@ -86,38 +88,60 @@ function MasteryDot({ rating }: { rating?: Rating }) {
 
 // ── Game type picker (shown after choosing a perek or "all") ─────
 
-const GAME_TYPES: { type: GameType; title: string; desc: string; color: string; border: string; bg: string }[] = [
+const GAME_TYPES: { type: GameType; title: string; desc: string; color: string; border: string; bg: string; emoji: string }[] = [
   {
     type: "study",
     title: "Flashcards",
-    desc: "Flip cards to review siman + 3 points",
+    desc: "Flip cards to review siman, 3 points + illustration",
     color: "text-[#1a3a5c]",
     border: "border-[#1a3a5c]",
     bg: "bg-[#1a3a5c]/5",
+    emoji: "\uD83D\uDCDA",
   },
   {
     type: "quiz",
     title: "Multiple Choice",
-    desc: "6 question types with mastery tracking",
+    desc: "6 question types: pick the point, odd one out, complete the set...",
     color: "text-duo-green-dark",
     border: "border-duo-green",
     bg: "bg-duo-green-light",
+    emoji: "\u2753",
+  },
+  {
+    type: "truefalse",
+    title: "True or False",
+    desc: "Is this statement about the daf correct?",
+    color: "text-duo-purple",
+    border: "border-duo-purple",
+    bg: "bg-purple-50",
+    emoji: "\u2696\uFE0F",
+  },
+  {
+    type: "speed",
+    title: "Speed Round",
+    desc: "60 seconds - how many can you answer?",
+    color: "text-duo-red",
+    border: "border-duo-red",
+    bg: "bg-duo-red-light",
+    emoji: "\u23F1\uFE0F",
   },
   {
     type: "matching",
     title: "Matching",
-    desc: "Match daf numbers to their simanim",
+    desc: "Tap to pair daf numbers with their simanim",
     color: "text-duo-blue",
     border: "border-duo-blue",
     bg: "bg-blue-50",
+    emoji: "\uD83D\uDD17",
   },
   {
     type: "sequence",
     title: "Order the Simanim",
-    desc: "Put simanim in correct daf order",
+    desc: "Put simanim in correct daf order to build the chain",
     color: "text-amber-700",
     border: "border-duo-gold",
     bg: "bg-amber-50",
+    emoji: "\uD83D\uDD22",
   },
 ];
 
@@ -141,20 +165,27 @@ function GameTypePicker({
         <h1 className="font-bold text-lg text-gray-800">{perekName}</h1>
       </header>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-6 gap-4">
-        <h2 className="text-xl font-bold text-gray-800 mb-2">Choose a Mode</h2>
+      <div className="flex-1 overflow-y-auto px-6 py-6">
+        <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">Choose a Mode</h2>
 
+        <div className="max-w-sm mx-auto space-y-3">
         {GAME_TYPES.map((g, i) => (
           <button
             key={g.type}
             onClick={() => onSelect(g.type)}
-            className={`w-full max-w-sm p-5 rounded-xl border-2 border-b-4 ${g.border} ${g.bg} text-left active:border-b-2 active:mt-[2px] transition-all animate-fade-in-up`}
-            style={{ animationDelay: `${i * 0.06}s`, animationFillMode: "both" }}
+            className={`w-full p-4 rounded-xl border-2 border-b-4 ${g.border} ${g.bg} text-left active:border-b-2 active:mt-[2px] transition-all animate-fade-in-up`}
+            style={{ animationDelay: `${i * 0.05}s`, animationFillMode: "both" }}
           >
-            <p className={`font-bold text-lg ${g.color}`}>{g.title}</p>
-            <p className="text-sm text-gray-500 mt-0.5">{g.desc}</p>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{g.emoji}</span>
+              <div className="flex-1">
+                <p className={`font-bold text-base ${g.color}`}>{g.title}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{g.desc}</p>
+              </div>
+            </div>
           </button>
         ))}
+        </div>
       </div>
     </div>
   );
@@ -343,6 +374,14 @@ export default function GemaraPage() {
 
     if (activeMode.type === "sequence") {
       return <SequenceDrill dafim={dafim} title={title} onBack={goBack} />;
+    }
+
+    if (activeMode.type === "speed") {
+      return <SpeedRound dafim={dafim} allDafim={allDafim} title={title} onBack={goBack} />;
+    }
+
+    if (activeMode.type === "truefalse") {
+      return <TrueFalseQuiz dafim={dafim} allDafim={allDafim} title={title} onBack={goBack} />;
     }
   }
 

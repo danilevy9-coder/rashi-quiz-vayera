@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Image from "next/image";
 import type { Daf } from "../data/yevamos";
 
 interface FlashcardProps {
@@ -11,14 +12,18 @@ interface FlashcardProps {
 
 export default function Flashcard({ daf, onRate, showRating }: FlashcardProps) {
   const [flipped, setFlipped] = useState(false);
+  const [showImage, setShowImage] = useState(false);
 
   const handleFlip = useCallback(() => {
     setFlipped((f) => !f);
+    setShowImage(false);
   }, []);
+
+  const imageSrc = `/images/yevamos/daf-${daf.dafNumber}.jpg`;
 
   return (
     <div className="w-full max-w-lg mx-auto">
-      {/* Card — no 3D flip, just show/hide for reliable sizing */}
+      {/* Card */}
       <div className="cursor-pointer" onClick={handleFlip}>
         {!flipped ? (
           /* Front */
@@ -77,7 +82,29 @@ export default function Flashcard({ daf, onRate, showRating }: FlashcardProps) {
               </div>
             )}
 
-            <div className="text-xs text-gray-400 text-center mt-1">Tap to flip back</div>
+            {/* Illustration image */}
+            {!showImage ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowImage(true);
+                }}
+                className="mt-2 w-full py-3 rounded-xl border-2 border-dashed border-duo-blue bg-blue-50 text-duo-blue font-bold text-sm hover:bg-blue-100 transition-all"
+              >
+                Show Illustration
+              </button>
+            ) : (
+              <div className="mt-2 rounded-xl overflow-hidden border border-gray-200 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+                <img
+                  src={imageSrc}
+                  alt={`Daf ${daf.dafHebrew} - ${daf.siman} illustration`}
+                  className="w-full h-auto"
+                  loading="lazy"
+                />
+              </div>
+            )}
+
+            <div className="text-xs text-gray-400 text-center mt-1">Tap card to flip back</div>
           </div>
         )}
       </div>

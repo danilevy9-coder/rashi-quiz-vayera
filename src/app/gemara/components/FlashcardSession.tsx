@@ -218,8 +218,8 @@ export default function FlashcardSession({
       </header>
 
       {/* Card area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col items-center">
-        <div className="my-auto w-full">
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col items-center">
+        <div className="w-full">
           <Flashcard key={currentDaf.dafNumber} daf={currentDaf} onRate={handleRate} showRating={true} imageFolder={imageFolder} />
         </div>
       </div>

@@ -8,9 +8,10 @@ interface FlashcardProps {
   daf: Daf;
   onRate: (rating: "knew" | "partial" | "forgot") => void;
   showRating: boolean;
+  imageFolder?: string;
 }
 
-export default function Flashcard({ daf, onRate, showRating }: FlashcardProps) {
+export default function Flashcard({ daf, onRate, showRating, imageFolder = "yevamos" }: FlashcardProps) {
   const [flipped, setFlipped] = useState(false);
   const [showImage, setShowImage] = useState(false);
 
@@ -19,7 +20,7 @@ export default function Flashcard({ daf, onRate, showRating }: FlashcardProps) {
     setShowImage(false);
   }, []);
 
-  const imageSrc = `/images/yevamos/daf-${daf.dafNumber}.jpg`;
+  const imageSrc = `/images/${imageFolder}/daf-${daf.dafNumber}.jpg`;
 
   return (
     <div className="w-full max-w-lg mx-auto">

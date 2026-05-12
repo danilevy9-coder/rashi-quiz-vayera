@@ -1,7 +1,21 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { getDafimByPerek, getAllDafim, MASECHTA_NAME, MASECHTA_NAME_EN, TOTAL_DAFIM, type Perek } from "./data/yevamos";
+import {
+  getDafimByPerek as getYevamosPerakim,
+  getAllDafim as getYevamosAllDafim,
+  MASECHTA_NAME as YEVAMOS_NAME,
+  MASECHTA_NAME_EN as YEVAMOS_NAME_EN,
+  TOTAL_DAFIM as YEVAMOS_TOTAL,
+  type Perek,
+} from "./data/yevamos";
+import {
+  getDafimByPerek as getSuccahPerakim,
+  getAllDafim as getSuccahAllDafim,
+  MASECHTA_NAME as SUCCAH_NAME,
+  MASECHTA_NAME_EN as SUCCAH_NAME_EN,
+  TOTAL_DAFIM as SUCCAH_TOTAL,
+} from "./data/succah";
 import FlashcardSession from "./components/FlashcardSession";
 import GemaraQuiz from "./components/GemaraQuiz";
 import MatchingGame from "./components/MatchingGame";
@@ -11,22 +25,55 @@ import Link from "next/link";
 type Rating = "knew" | "partial" | "forgot";
 type GameType = "study" | "quiz" | "matching" | "sequence";
 type ActiveMode = null | { type: GameType; scope: "all" | number };
+type MasechtaId = "yevamos" | "succah";
 
-const STORAGE_KEY = "gemara-flashcard-ratings";
+interface MasechtaConfig {
+  id: MasechtaId;
+  name: string;
+  nameEn: string;
+  total: number;
+  getPrakim: () => Perek[];
+  getAllDafim: () => import("./data/yevamos").Daf[];
+  imageFolder: string;
+  storageKey: string;
+}
 
-function loadRatings(): Record<number, Rating> {
+const MASECHTOS: MasechtaConfig[] = [
+  {
+    id: "yevamos",
+    name: YEVAMOS_NAME,
+    nameEn: YEVAMOS_NAME_EN,
+    total: YEVAMOS_TOTAL,
+    getPrakim: getYevamosPerakim,
+    getAllDafim: getYevamosAllDafim,
+    imageFolder: "yevamos",
+    storageKey: "gemara-flashcard-ratings",
+  },
+  {
+    id: "succah",
+    name: SUCCAH_NAME,
+    nameEn: SUCCAH_NAME_EN,
+    total: SUCCAH_TOTAL,
+    getPrakim: getSuccahPerakim,
+    getAllDafim: getSuccahAllDafim,
+    imageFolder: "succah",
+    storageKey: "gemara-flashcard-ratings-succah",
+  },
+];
+
+function loadRatings(key: string): Record<number, Rating> {
   if (typeof window === "undefined") return {};
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
   }
 }
 
-function saveRatings(ratings: Record<number, Rating>) {
+function saveRatings(key: string, ratings: Record<number, Rating>) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(ratings));
+    localStorage.setItem(key, JSON.stringify(ratings));
   } catch {}
 }
 
@@ -166,27 +213,92 @@ function PerekCard({
   );
 }
 
+// ── Masechta selection screen ──────────────────────────────────
+
+function MasechtaSelector({ onSelect }: { onSelect: (m: MasechtaConfig) => void }) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-[#1a3a5c] text-white">
+        <div className="max-w-2xl mx-auto px-4 py-5">
+          <div className="flex items-center gap-3 mb-4">
+            <Link href="/" className="text-white/70 hover:text-white text-xl font-light">
+              &larr;
+            </Link>
+            <div className="flex-1" />
+            <span className="text-sm text-white/60 font-medium">Zichru</span>
+          </div>
+          <div className="text-center">
+            <h1 className="text-3xl font-bold mb-1">Gemara Flashcards</h1>
+            <p className="text-white/70 text-sm">Choose a Masechta to study</p>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-2xl mx-auto px-4 py-8 space-y-4">
+        {MASECHTOS.map((m, i) => (
+          <button
+            key={m.id}
+            onClick={() => onSelect(m)}
+            className="w-full text-left p-6 rounded-xl border-2 border-b-4 border-gray-200 bg-white hover:border-[#1a3a5c] active:border-b-2 active:mt-[2px] transition-all animate-fade-in-up"
+            style={{ animationDelay: `${i * 0.08}s`, animationFillMode: "both" }}
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 w-16 h-16 rounded-2xl bg-[#1a3a5c] text-white flex items-center justify-center text-2xl font-bold" dir="rtl">
+                {m.name}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-gray-800 text-xl">{m.nameEn}</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {m.total} Dafim
+                </p>
+              </div>
+              <div className="text-gray-300 text-2xl font-light">&rarr;</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ───────────────────────────────────────────────────
 
 export default function GemaraPage() {
+  const [selectedMasechta, setSelectedMasechta] = useState<MasechtaConfig | null>(null);
   const [ratings, setRatings] = useState<Record<number, Rating>>({});
   // Two-step flow: first pick scope (perek or all), then pick game type
   const [pickedScope, setPickedScope] = useState<"all" | number | null>(null);
   const [activeMode, setActiveMode] = useState<ActiveMode>(null);
   const [mounted, setMounted] = useState(false);
 
-  const prakim = useMemo(() => getDafimByPerek(), []);
-  const allDafim = useMemo(() => getAllDafim(), []);
+  const masechta = selectedMasechta;
+  const prakim = useMemo(() => masechta?.getPrakim() ?? [], [masechta]);
+  const allDafim = useMemo(() => masechta?.getAllDafim() ?? [], [masechta]);
+  const MASECHTA_NAME_VAL = masechta?.name ?? "";
+  const MASECHTA_NAME_EN_VAL = masechta?.nameEn ?? "";
+  const TOTAL_DAFIM_VAL = masechta?.total ?? 0;
 
   useEffect(() => {
-    setRatings(loadRatings());
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    if (masechta) {
+      setRatings(loadRatings(masechta.storageKey));
+    }
+  }, [masechta]);
+
   const handleSaveRatings = (newRatings: Record<number, Rating>) => {
     setRatings(newRatings);
-    saveRatings(newRatings);
+    if (masechta) {
+      saveRatings(masechta.storageKey, newRatings);
+    }
   };
+
+  // ── No masechta selected: show selector ──
+  if (!masechta) {
+    return <MasechtaSelector onSelect={setSelectedMasechta} />;
+  }
 
   // ── Active game session ──
   if (activeMode) {
@@ -197,7 +309,7 @@ export default function GemaraPage() {
 
     const title =
       activeMode.scope === "all"
-        ? `${MASECHTA_NAME}`
+        ? `${MASECHTA_NAME_VAL}`
         : (() => {
             const p = prakim.find((pk) => pk.number === activeMode.scope);
             return p ? `${p.nameHebrew} · Perek ${p.number}` : "";
@@ -216,6 +328,7 @@ export default function GemaraPage() {
           onBack={goBack}
           savedRatings={ratings}
           onSaveRatings={handleSaveRatings}
+          imageFolder={masechta.imageFolder}
         />
       );
     }
@@ -237,7 +350,7 @@ export default function GemaraPage() {
   if (pickedScope !== null) {
     const perekName =
       pickedScope === "all"
-        ? `All Dafim (${TOTAL_DAFIM})`
+        ? `All Dafim (${TOTAL_DAFIM_VAL})`
         : (() => {
             const p = prakim.find((pk) => pk.number === pickedScope);
             return p ? `${p.nameHebrew} · ${p.name}` : "";
@@ -265,16 +378,22 @@ export default function GemaraPage() {
       <header className="bg-[#1a3a5c] text-white">
         <div className="max-w-2xl mx-auto px-4 py-5">
           <div className="flex items-center gap-3 mb-4">
-            <Link href="/" className="text-white/70 hover:text-white text-xl font-light">
+            <button
+              onClick={() => {
+                setSelectedMasechta(null);
+                setRatings({});
+              }}
+              className="text-white/70 hover:text-white text-xl font-light"
+            >
               &larr;
-            </Link>
+            </button>
             <div className="flex-1" />
             <span className="text-sm text-white/60 font-medium">Zichru</span>
           </div>
           <div className="text-center">
-            <h1 className="text-3xl font-bold mb-1" dir="rtl">{MASECHTA_NAME}</h1>
+            <h1 className="text-3xl font-bold mb-1" dir="rtl">{MASECHTA_NAME_VAL}</h1>
             <p className="text-white/70 text-sm">
-              {MASECHTA_NAME_EN} &middot; {TOTAL_DAFIM} Dafim &middot; {prakim.length} Prakim
+              {MASECHTA_NAME_EN_VAL} &middot; {TOTAL_DAFIM_VAL} Dafim &middot; {prakim.length} Prakim
             </p>
           </div>
         </div>
@@ -286,17 +405,17 @@ export default function GemaraPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-4 animate-fade-in-up">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-bold text-gray-800">Your Progress</h2>
-              <span className="text-sm text-gray-500">{totalRated}/{TOTAL_DAFIM} reviewed</span>
+              <span className="text-sm text-gray-500">{totalRated}/{TOTAL_DAFIM_VAL} reviewed</span>
             </div>
             <div className="w-full h-4 bg-gray-100 rounded-full overflow-hidden flex">
               {knew > 0 && (
-                <div className="h-full bg-duo-green transition-all" style={{ width: `${(knew / TOTAL_DAFIM) * 100}%` }} />
+                <div className="h-full bg-duo-green transition-all" style={{ width: `${(knew / TOTAL_DAFIM_VAL) * 100}%` }} />
               )}
               {partial > 0 && (
-                <div className="h-full bg-duo-gold transition-all" style={{ width: `${(partial / TOTAL_DAFIM) * 100}%` }} />
+                <div className="h-full bg-duo-gold transition-all" style={{ width: `${(partial / TOTAL_DAFIM_VAL) * 100}%` }} />
               )}
               {forgot > 0 && (
-                <div className="h-full bg-duo-red transition-all" style={{ width: `${(forgot / TOTAL_DAFIM) * 100}%` }} />
+                <div className="h-full bg-duo-red transition-all" style={{ width: `${(forgot / TOTAL_DAFIM_VAL) * 100}%` }} />
               )}
             </div>
             <div className="flex justify-between mt-2 text-xs text-gray-500">
@@ -318,7 +437,7 @@ export default function GemaraPage() {
           onClick={() => setPickedScope("all")}
           className="w-full py-4 rounded-xl border-2 border-b-4 border-[#1a3a5c] bg-[#1a3a5c] text-white font-bold text-lg active:border-b-2 active:mt-[2px] transition-all"
         >
-          All {TOTAL_DAFIM} Dafim &rarr;
+          All {TOTAL_DAFIM_VAL} Dafim &rarr;
         </button>
 
         {/* Prakim list */}
@@ -343,7 +462,7 @@ export default function GemaraPage() {
               onClick={() => {
                 if (confirm("Reset all flashcard progress?")) {
                   setRatings({});
-                  saveRatings({});
+                  saveRatings(masechta.storageKey, {});
                 }
               }}
               className="text-sm text-gray-400 hover:text-duo-red transition-colors"

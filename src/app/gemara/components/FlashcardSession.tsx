@@ -18,6 +18,7 @@ interface FlashcardSessionProps {
   onBack: () => void;
   savedRatings: Record<number, Rating>;
   onSaveRatings: (ratings: Record<number, Rating>) => void;
+  imageFolder?: string;
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -37,6 +38,7 @@ export default function FlashcardSession({
   onBack,
   savedRatings,
   onSaveRatings,
+  imageFolder,
 }: FlashcardSessionProps) {
   const [mode, setMode] = useState<SessionMode | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -218,7 +220,7 @@ export default function FlashcardSession({
       {/* Card area */}
       <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col items-center">
         <div className="my-auto w-full">
-          <Flashcard key={currentDaf.dafNumber} daf={currentDaf} onRate={handleRate} showRating={true} />
+          <Flashcard key={currentDaf.dafNumber} daf={currentDaf} onRate={handleRate} showRating={true} imageFolder={imageFolder} />
         </div>
       </div>
 

@@ -22,10 +22,11 @@ import MatchingGame from "./components/MatchingGame";
 import SequenceDrill from "./components/SequenceDrill";
 import SpeedRound from "./components/SpeedRound";
 import TrueFalseQuiz from "./components/TrueFalseQuiz";
+import ImageQuiz from "./components/ImageQuiz";
 import Link from "next/link";
 
 type Rating = "knew" | "partial" | "forgot";
-type GameType = "study" | "quiz" | "matching" | "sequence" | "speed" | "truefalse";
+type GameType = "study" | "quiz" | "matching" | "sequence" | "speed" | "truefalse" | "image";
 type ActiveMode = null | { type: GameType; scope: "all" | number };
 type MasechtaId = "yevamos" | "succah";
 
@@ -106,6 +107,15 @@ const GAME_TYPES: { type: GameType; title: string; desc: string; color: string; 
     border: "border-duo-green",
     bg: "bg-duo-green-light",
     emoji: "\u2753",
+  },
+  {
+    type: "image",
+    title: "What Daf Is This?",
+    desc: "See the illustration, pick the correct daf",
+    color: "text-orange-700",
+    border: "border-orange-400",
+    bg: "bg-orange-50",
+    emoji: "\uD83D\uDDBC\uFE0F",
   },
   {
     type: "truefalse",
@@ -382,6 +392,10 @@ export default function GemaraPage() {
 
     if (activeMode.type === "truefalse") {
       return <TrueFalseQuiz dafim={dafim} allDafim={allDafim} title={title} onBack={goBack} />;
+    }
+
+    if (activeMode.type === "image") {
+      return <ImageQuiz dafim={dafim} allDafim={allDafim} title={title} imageFolder={masechta.imageFolder} onBack={goBack} />;
     }
   }
 

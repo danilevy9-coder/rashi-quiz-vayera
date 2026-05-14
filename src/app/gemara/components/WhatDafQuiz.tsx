@@ -175,27 +175,25 @@ export default function WhatDafQuiz({ dafim, allDafim, title, onBack }: WhatDafQ
       </header>
 
       {/* Content */}
-      <div className="flex-1 flex flex-col px-4 py-6 max-w-lg mx-auto w-full">
-        <span className="text-xs font-semibold text-white bg-[#1a3a5c] rounded-full px-3 py-1 mb-4 self-start">What Daf Is This?</span>
-
+      <div className="flex-1 flex flex-col px-4 py-3 max-w-lg mx-auto w-full">
         {/* Topic card */}
-        <div className="w-full p-6 rounded-2xl bg-white border-2 border-gray-200 mb-6 animate-fade-in-up">
+        <div className="w-full p-4 rounded-xl bg-white border-2 border-gray-200 mb-3 animate-fade-in-up">
           {question.pointHebrew && (
-            <p className="text-xl font-bold text-gray-800 leading-relaxed text-center mb-2" dir="rtl">
+            <p className="text-lg font-bold text-gray-800 leading-snug text-center mb-1" dir="rtl">
               {question.pointHebrew}
             </p>
           )}
           {question.pointEnglish && (
-            <p className="text-base text-gray-500 text-center leading-relaxed">
+            <p className="text-sm text-gray-500 text-center leading-snug">
               {question.pointEnglish}
             </p>
           )}
         </div>
 
-        <p className="text-sm text-gray-400 text-center mb-4">Which daf discusses this topic?</p>
+        <p className="text-xs text-gray-400 text-center mb-2">Which daf discusses this?</p>
 
         {/* Choices */}
-        <div className="space-y-3 flex-1">
+        <div className="space-y-2 flex-1">
           {question.choices.map((choice, i) => {
             let borderColor = "border-duo-gray";
             let bgColor = "bg-white";
@@ -218,7 +216,7 @@ export default function WhatDafQuiz({ dafim, allDafim, title, onBack }: WhatDafQ
                 key={i}
                 onClick={() => handleChoice(i)}
                 disabled={showResult}
-                className={`w-full text-left p-4 rounded-xl border-2 border-b-4 ${borderColor} ${bgColor} ${textColor} font-bold transition-all ${
+                className={`w-full text-left py-3 px-4 rounded-xl border-2 border-b-4 ${borderColor} ${bgColor} ${textColor} font-bold text-sm transition-all ${
                   !showResult ? "active:border-b-2 active:mt-[2px] hover:border-[#1a3a5c]" : ""
                 } animate-stagger-${i + 1}`}
               >
@@ -230,18 +228,20 @@ export default function WhatDafQuiz({ dafim, allDafim, title, onBack }: WhatDafQ
 
         {/* Feedback */}
         {showResult && (
-          <div className={`mt-4 p-4 rounded-xl animate-slide-up ${isCorrect ? "bg-duo-green-light border-2 border-duo-green" : "bg-duo-red-light border-2 border-duo-red"}`}>
-            <p className={`font-bold text-lg ${isCorrect ? "text-duo-green-dark" : "text-duo-red"}`}>{feedbackMsg}</p>
-            {!isCorrect && (
-              <p className="text-sm mt-1 text-duo-red/80">
-                This topic is from Daf {question.daf.dafHebrew} &mdash; {question.daf.siman}
-              </p>
-            )}
+          <div className={`mt-3 p-3 rounded-xl animate-slide-up flex items-center gap-3 ${isCorrect ? "bg-duo-green-light border-2 border-duo-green" : "bg-duo-red-light border-2 border-duo-red"}`}>
+            <div className="flex-1">
+              <p className={`font-bold ${isCorrect ? "text-duo-green-dark" : "text-duo-red"}`}>{feedbackMsg}</p>
+              {!isCorrect && (
+                <p className="text-xs mt-0.5 text-duo-red/80">
+                  Answer: Daf {question.daf.dafHebrew} &mdash; {question.daf.siman}
+                </p>
+              )}
+            </div>
             <button
               onClick={handleNext}
-              className={`mt-3 w-full py-3 rounded-xl font-bold text-white ${isCorrect ? "bg-duo-green" : "bg-duo-red"} active:opacity-80`}
+              className={`px-5 py-2 rounded-lg font-bold text-white text-sm ${isCorrect ? "bg-duo-green" : "bg-duo-red"} active:opacity-80`}
             >
-              Continue
+              Next
             </button>
           </div>
         )}

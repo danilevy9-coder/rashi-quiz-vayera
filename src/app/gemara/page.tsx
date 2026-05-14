@@ -24,10 +24,11 @@ import SpeedRound from "./components/SpeedRound";
 import TrueFalseQuiz from "./components/TrueFalseQuiz";
 import ImageQuiz from "./components/ImageQuiz";
 import WhatDafQuiz from "./components/WhatDafQuiz";
+import SugyaSimulator from "./components/SugyaSimulator";
 import Link from "next/link";
 
 type Rating = "knew" | "partial" | "forgot";
-type GameType = "study" | "quiz" | "matching" | "sequence" | "speed" | "truefalse" | "image" | "whatdaf";
+type GameType = "study" | "quiz" | "matching" | "sequence" | "speed" | "truefalse" | "image" | "whatdaf" | "journey";
 type ActiveMode = null | { type: GameType; scope: "all" | number };
 type MasechtaId = "yevamos" | "succah";
 
@@ -91,6 +92,15 @@ function MasteryDot({ rating }: { rating?: Rating }) {
 // ── Game type picker (shown after choosing a perek or "all") ─────
 
 const GAME_TYPES: { type: GameType; title: string; desc: string; color: string; border: string; bg: string; emoji: string }[] = [
+  {
+    type: "journey",
+    title: "Sugya Simulator",
+    desc: "Interactive journey: explore the map, uncover each point, discover connections",
+    color: "text-indigo-700",
+    border: "border-indigo-400",
+    bg: "bg-indigo-50",
+    emoji: "\uD83D\uDDFA\uFE0F",
+  },
   {
     type: "study",
     title: "Flashcards",
@@ -410,6 +420,10 @@ export default function GemaraPage() {
 
     if (activeMode.type === "whatdaf") {
       return <WhatDafQuiz dafim={dafim} allDafim={allDafim} title={title} onBack={goBack} />;
+    }
+
+    if (activeMode.type === "journey") {
+      return <SugyaSimulator dafim={dafim} allDafim={allDafim} title={title} onBack={goBack} imageFolder={masechta.imageFolder} />;
     }
   }
 

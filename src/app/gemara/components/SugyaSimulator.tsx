@@ -11,7 +11,7 @@
  * ═══════════════════════════════════════════════════════════
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import type { Daf, Perek } from "../data/yevamos";
 // ── PART 2 import (AI Chavrusa) ──
 import AIChavrusa from "./AIChavrusa";
@@ -148,6 +148,14 @@ function MapView({
 }
 
 // ── Journey Mode ───────────────────────────────────────────
+// Redesigned: TEACHES the material step-by-step instead of testing recall.
+// Flow: Intro → Learn each point (with AI explanation) → Decode the story → Check yourself → Connections
+
+const POINT_COLORS = [
+  { bg: "bg-blue-50", border: "border-blue-300", text: "text-blue-800", badge: "bg-blue-600", light: "text-blue-600", highlight: "bg-blue-100" },
+  { bg: "bg-emerald-50", border: "border-emerald-300", text: "text-emerald-800", badge: "bg-emerald-600", light: "text-emerald-600", highlight: "bg-emerald-100" },
+  { bg: "bg-violet-50", border: "border-violet-300", text: "text-violet-800", badge: "bg-violet-600", light: "text-violet-600", highlight: "bg-violet-100" },
+];
 
 function JourneyMode({
   daf,
@@ -164,13 +172,33 @@ function JourneyMode({
   onNavigate: (daf: Daf) => void;
   imageFolder: string;
 }) {
-  const [act, setAct] = useState(0); // 0=scene, 1..3=points, 4=connections
-  const [revealedPoints, setRevealedPoints] = useState<Set<number>>(new Set());
-  const [thinkingPoint, setThinkingPoint] = useState<number | null>(null);
+  // Steps: 0=intro, 1..N=learn each point, N+1=decode story, N+2=check yourself, N+3=connections
+  const numPoints = daf.points.length;
+  const STEP_INTRO = 0;
+  const STEP_FIRST_POINT = 1;
+  const STEP_LAST_POINT = numPoints;
+  const STEP_DECODE = numPoints + 1;
+  const STEP_CHECK = numPoints + 2;
+  const STEP_CONNECTIONS = numPoints + 3;
+  const totalSteps = numPoints + 4;
+
+  const [step, setStep] = useState(0);
   // ── PART 2: AI Chavrusa panel state ──
   const [aiOpen, setAiOpen] = useState(false);
+  // ── PART 2: AI auto-explain for each point ──
+  const [aiExplanations, setAiExplanations] = useState<Record<number, string>>({});
+  const [aiLoading, setAiLoading] = useState<Record<number, boolean>>({});
+  // Check-yourself quiz state
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, number | null>>({});
+  const [quizRevealed, setQuizRevealed] = useState<Set<number>>(new Set());
 
   const imageSrc = `/images/${imageFolder}/daf-${daf.dafNumber}.jpg`;
+  const progress = ((step + 1) / totalSteps) * 100;
+
+  // Navigation between dafim in the set
+  const dafIndex = allDafim.findIndex((d) => d.dafNumber === daf.dafNumber);
+  const prevDaf = dafIndex > 0 ? allDafim[dafIndex - 1] : null;
+  const nextDaf = dafIndex < allDafim.length - 1 ? allDafim[dafIndex + 1] : null;
 
   // Find concepts this daf participates in
   const dafConcepts = useMemo(
@@ -194,302 +222,383 @@ function JourneyMode({
         }
       }
     }
-    // Sort by most shared concepts, then by proximity
     return Array.from(connected.values())
       .sort((a, b) => {
         if (b.sharedConcepts.length !== a.sharedConcepts.length)
           return b.sharedConcepts.length - a.sharedConcepts.length;
-        return (
-          Math.abs(a.daf.dafNumber - daf.dafNumber) -
-          Math.abs(b.daf.dafNumber - daf.dafNumber)
-        );
+        return Math.abs(a.daf.dafNumber - daf.dafNumber) - Math.abs(b.daf.dafNumber - daf.dafNumber);
       })
       .slice(0, 8);
   }, [dafConcepts, daf.dafNumber, allDafim]);
 
-  const handleRevealPoint = (idx: number) => {
-    setThinkingPoint(null);
-    setRevealedPoints((prev) => new Set([...prev, idx]));
-  };
+  // Build a simple comprehension quiz from the daf data
+  const quizQuestions = useMemo(() => {
+    // For each point, create a question: "Which of these is discussed on this daf?"
+    // One correct answer (from this daf), others from neighboring dafim
+    return daf.points.map((point, i) => {
+      const distractors: string[] = [];
+      for (const other of allDafim) {
+        if (other.dafNumber === daf.dafNumber) continue;
+        for (const op of other.points) {
+          if (op.english && distractors.length < 2) {
+            distractors.push(op.english);
+          }
+        }
+        if (distractors.length >= 2) break;
+      }
+      const correctText = point.english || point.hebrew;
+      const choices = [correctText, ...distractors.slice(0, 2)];
+      // Shuffle deterministically based on daf+point index
+      const seed = daf.dafNumber * 10 + i;
+      const shuffled = choices.map((c, ci) => ({ text: c, orig: ci }))
+        .sort((a, b) => {
+          const ha = ((a.orig + seed) * 2654435761) >>> 0;
+          const hb = ((b.orig + seed) * 2654435761) >>> 0;
+          return ha - hb;
+        });
+      const correctIdx = shuffled.findIndex(s => s.orig === 0);
+      return { question: `Point ${i + 1}: Which topic is on Daf ${daf.dafHebrew} (${daf.siman})?`, choices: shuffled.map(s => s.text), correctIdx };
+    });
+  }, [daf, allDafim]);
 
-  const handleThink = (idx: number) => {
-    setThinkingPoint(idx);
-  };
+  // ── PART 2: Auto-fetch AI explanation when arriving at a point step ──
+  useEffect(() => {
+    if (step < STEP_FIRST_POINT || step > STEP_LAST_POINT) return;
+    const pointIndex = step - 1;
+    if (aiExplanations[pointIndex] || aiLoading[pointIndex]) return;
+    setAiLoading(prev => ({ ...prev, [pointIndex]: true }));
+    fetch("/api/chavrusa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "explain",
+        pointIndex,
+        depth: "simple",
+        daf: {
+          dafNumber: daf.dafNumber, dafHebrew: daf.dafHebrew,
+          siman: daf.siman, simanHebrew: daf.simanHebrew,
+          perekName: daf.perekName, perekNameHebrew: daf.perekNameHebrew,
+          points: daf.points, story: daf.story,
+        },
+      }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.reply) setAiExplanations(prev => ({ ...prev, [pointIndex]: data.reply }));
+      })
+      .catch(() => {})
+      .finally(() => setAiLoading(prev => ({ ...prev, [pointIndex]: false })));
+  }, [step, daf, aiExplanations, aiLoading, STEP_FIRST_POINT, STEP_LAST_POINT]);
 
-  const totalActs = daf.points.length + 2; // scene + N points + connections
-  const progress = ((act + 1) / totalActs) * 100;
-
-  // Navigation between dafim in the set
-  const dafIndex = allDafim.findIndex((d) => d.dafNumber === daf.dafNumber);
-  const prevDaf = dafIndex > 0 ? allDafim[dafIndex - 1] : null;
-  const nextDaf = dafIndex < allDafim.length - 1 ? allDafim[dafIndex + 1] : null;
+  // Scroll to top on step change
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [step]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center gap-3 max-w-3xl mx-auto">
-          <button
-            onClick={onBack}
-            className="text-gray-500 hover:text-gray-800 text-2xl font-light"
-          >
-            &larr;
-          </button>
+          <button onClick={onBack} className="text-gray-500 hover:text-gray-800 text-2xl font-light">&larr;</button>
           <div className="flex-1">
             <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#1a3a5c] rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${progress}%` }}
-              />
+              <div className="h-full bg-[#1a3a5c] rounded-full transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
             </div>
           </div>
-          <span className="text-sm text-gray-400 font-medium ml-2">
-            {act + 1}/{totalActs}
-          </span>
+          <span className="text-sm text-gray-400 font-medium ml-2">{step + 1}/{totalSteps}</span>
         </div>
       </header>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-4 py-6">
-          {/* ── ACT 0: The Scene ── */}
-          {act === 0 && (
+
+          {/* ═══ STEP 0: INTRODUCTION — Meet the Daf ═══ */}
+          {step === STEP_INTRO && (
             <div className="animate-fade-in-up">
-              {/* Siman hero */}
+              {/* The mnemonic system explained */}
               <div className="text-center mb-6">
                 <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-[#1a3a5c]/10 text-[#1a3a5c] text-sm font-medium mb-4">
                   {daf.perekNameHebrew} &middot; Perek {daf.perekNumber}
                 </div>
-                <div className="text-8xl font-bold text-[#1a3a5c] mb-2 animate-pop-in">
-                  {daf.dafHebrew}
-                </div>
+                <div className="text-8xl font-bold text-[#1a3a5c] mb-2 animate-pop-in">{daf.dafHebrew}</div>
                 <h2 className="text-2xl font-bold text-gray-800">{daf.siman}</h2>
-                <p className="text-sm text-gray-500 mt-1" dir="rtl">
-                  {daf.simanHebrew}
+                <p className="text-sm text-gray-500 mt-1" dir="rtl">{daf.simanHebrew}</p>
+              </div>
+
+              {/* How the mnemonic works */}
+              <div className="bg-[#1a3a5c]/5 rounded-2xl border-2 border-[#1a3a5c]/20 p-5 mb-5 animate-fade-in-up" style={{ animationDelay: "0.15s", animationFillMode: "both" }}>
+                <h3 className="font-bold text-[#1a3a5c] mb-2">How the Siman Works</h3>
+                <p className="text-gray-700 text-sm leading-relaxed">
+                  The letter <strong className="text-[#1a3a5c] text-lg">{daf.dafHebrew}</strong> is Daf {daf.dafNumber} in the masechta.
+                  The word <strong>&quot;{daf.siman}&quot;</strong> ({daf.simanHebrew}) starts with the letter <strong>{daf.dafHebrew}</strong>,
+                  creating a visual anchor. The story below weaves this image together with the {numPoints} key topics
+                  you&apos;re about to learn.
                 </p>
               </div>
 
               {/* Image */}
-              <div className="rounded-2xl overflow-hidden border-2 border-gray-200 bg-white mb-5">
-                <img
-                  src={imageSrc}
-                  alt={`Daf ${daf.dafHebrew} - ${daf.siman}`}
-                  className="w-full h-auto"
-                />
+              <div className="rounded-2xl overflow-hidden border-2 border-gray-200 bg-white mb-5 animate-fade-in-up" style={{ animationDelay: "0.25s", animationFillMode: "both" }}>
+                <img src={imageSrc} alt={`Daf ${daf.dafHebrew} - ${daf.siman}`} className="w-full h-auto" />
               </div>
 
-              {/* Story */}
-              {daf.story && (
-                <div className="bg-amber-50 rounded-2xl border-2 border-amber-200 p-5 mb-6 animate-fade-in-up" style={{ animationDelay: "0.2s", animationFillMode: "both" }}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-lg">📖</span>
-                    <h3 className="font-bold text-amber-800">The Story</h3>
-                  </div>
-                  <p className="text-amber-900 leading-relaxed">{daf.story}</p>
+              {/* What you'll learn */}
+              <div className="bg-white rounded-2xl border-2 border-gray-200 p-5 animate-fade-in-up" style={{ animationDelay: "0.35s", animationFillMode: "both" }}>
+                <h3 className="font-bold text-gray-800 mb-3">What You&apos;ll Learn</h3>
+                <div className="space-y-2.5">
+                  {daf.points.map((point, i) => {
+                    const color = POINT_COLORS[i % POINT_COLORS.length];
+                    return (
+                      <div key={i} className={`flex items-start gap-3 p-3 rounded-xl ${color.bg} border ${color.border}`}>
+                        <span className={`w-7 h-7 rounded-full ${color.badge} text-white text-sm font-bold flex items-center justify-center flex-shrink-0 mt-0.5`}>{i + 1}</span>
+                        <div>
+                          {point.english && <p className={`text-sm font-medium ${color.text}`}>{point.english}</p>}
+                          <p className="text-xs text-gray-500 mt-0.5" dir="rtl">{point.hebrew}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-
-              {/* Teaser */}
-              <div className="bg-[#1a3a5c]/5 rounded-2xl border-2 border-[#1a3a5c]/20 p-5 animate-fade-in-up" style={{ animationDelay: "0.35s", animationFillMode: "both" }}>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">🤔</span>
-                  <h3 className="font-bold text-[#1a3a5c]">What&apos;s on this Daf?</h3>
-                </div>
-                <p className="text-gray-600 text-sm leading-relaxed">
-                  This daf covers <strong>{daf.points.length} key topics</strong>.
-                  In the next steps, you&apos;ll encounter each one — but first,
-                  try to recall or predict what they might be before revealing them.
-                </p>
-                {daf.points[0]?.english && (
-                  <p className="text-gray-500 text-sm mt-3 italic">
-                    Hint: The first topic relates to&hellip; &quot;{daf.points[0].english.split(" ").slice(0, 4).join(" ")}&hellip;&quot;
-                  </p>
-                )}
               </div>
             </div>
           )}
 
-          {/* ── ACT 1-3: The Points (interactive reveals) ── */}
-          {act >= 1 && act <= daf.points.length && (() => {
-            const pointIndex = act - 1;
-            const point = daf.points[pointIndex];
+          {/* ═══ STEPS 1-N: LEARN EACH POINT ═══ */}
+          {step >= STEP_FIRST_POINT && step <= STEP_LAST_POINT && (() => {
+            const pi = step - 1;
+            const point = daf.points[pi];
             if (!point) return null;
-            const isRevealed = revealedPoints.has(pointIndex);
-            const isThinking = thinkingPoint === pointIndex;
+            const color = POINT_COLORS[pi % POINT_COLORS.length];
 
             return (
-              <div className="animate-fade-in-up" key={`point-${pointIndex}`}>
-                {/* Point header */}
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-full bg-[#1a3a5c] text-white flex items-center justify-center text-lg font-bold">
-                    {pointIndex + 1}
-                  </div>
+              <div className="animate-fade-in-up" key={`learn-${pi}`}>
+                {/* Point badge */}
+                <div className="flex items-center gap-3 mb-5">
+                  <div className={`w-10 h-10 rounded-full ${color.badge} text-white flex items-center justify-center text-lg font-bold`}>{pi + 1}</div>
                   <div>
-                    <p className="text-sm text-gray-400">
-                      Point {pointIndex + 1} of {daf.points.length}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      Daf {daf.dafHebrew} &middot; {daf.siman}
-                    </p>
+                    <p className={`text-sm font-bold ${color.light}`}>Point {pi + 1} of {numPoints}</p>
+                    <p className="text-xs text-gray-400">Daf {daf.dafHebrew} &middot; {daf.siman}</p>
                   </div>
                 </div>
 
-                {/* The challenge */}
-                {!isRevealed && !isThinking && (
-                  <div className="animate-fade-in">
-                    <div className="bg-gradient-to-br from-[#1a3a5c] to-[#0d1f33] rounded-2xl p-6 text-white text-center mb-6">
-                      <span className="text-4xl mb-4 block">🧠</span>
-                      <h3 className="text-xl font-bold mb-2">
-                        Can you recall point #{pointIndex + 1}?
-                      </h3>
-                      <p className="text-blue-200 text-sm">
-                        Think about what the {pointIndex + 1}
-                        {pointIndex === 0 ? "st" : pointIndex === 1 ? "nd" : "rd"}{" "}
-                        topic on Daf {daf.dafHebrew} ({daf.siman}) is about.
-                      </p>
-                    </div>
+                {/* The point content — presented as teaching, not testing */}
+                <div className={`rounded-2xl border-2 ${color.border} ${color.bg} p-6 mb-5`}>
+                  <p className="text-xl font-bold text-gray-800 leading-snug mb-3" dir="rtl">{point.hebrew}</p>
+                  {point.english && <p className={`text-base ${color.text} leading-relaxed font-medium`}>{point.english}</p>}
+                </div>
 
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => handleThink(pointIndex)}
-                        className="flex-1 py-4 rounded-xl border-2 border-b-4 border-duo-gold bg-amber-50 text-amber-700 font-bold active:border-b-2 active:mt-[2px] transition-all"
-                      >
-                        Let me think&hellip;
-                      </button>
-                      <button
-                        onClick={() => handleRevealPoint(pointIndex)}
-                        className="flex-1 py-4 rounded-xl border-2 border-b-4 border-[#1a3a5c] bg-white text-[#1a3a5c] font-bold active:border-b-2 active:mt-[2px] transition-all"
-                      >
-                        Show me
-                      </button>
+                {/* ── PART 2: AI-generated explanation (auto-loaded) ── */}
+                <div className="mb-5">
+                  {aiLoading[pi] && (
+                    <div className="bg-white rounded-2xl border-2 border-gray-200 p-5 animate-fade-in">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-lg">🤖</span>
+                        <span className="text-sm font-bold text-gray-500">AI Chavrusa is explaining...</span>
+                      </div>
+                      <div className="h-4 bg-gray-100 rounded animate-pulse-slow mb-2 w-3/4" />
+                      <div className="h-4 bg-gray-100 rounded animate-pulse-slow mb-2 w-full" />
+                      <div className="h-4 bg-gray-100 rounded animate-pulse-slow w-2/3" />
                     </div>
+                  )}
+                  {aiExplanations[pi] && (
+                    <div className="bg-white rounded-2xl border-2 border-emerald-200 p-5 animate-fade-in-up">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-lg">🤖</span>
+                        <h4 className="font-bold text-emerald-700 text-sm">AI Chavrusa Explains</h4>
+                      </div>
+                      <div className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">{aiExplanations[pi]}</div>
+                    </div>
+                  )}
+                  {!aiLoading[pi] && !aiExplanations[pi] && (
+                    <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 text-center">
+                      <p className="text-xs text-gray-400">AI explanation not available — tap the AI button below for a deeper dive</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* How this point connects to the siman */}
+                <div className="bg-amber-50 rounded-2xl border border-amber-200 p-4 mb-5 animate-fade-in-up" style={{ animationDelay: "0.15s", animationFillMode: "both" }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`w-6 h-6 rounded-full ${color.badge} text-white text-xs font-bold flex items-center justify-center`}>{pi + 1}</span>
+                    <span className="text-sm font-bold text-amber-700">In the Siman Story</span>
                   </div>
-                )}
+                  <p className="text-sm text-amber-800 leading-relaxed italic">&quot;{daf.story}&quot;</p>
+                  <p className="text-xs text-amber-600 mt-2">The siman <strong>{daf.siman}</strong> ({daf.simanHebrew}) anchors all {numPoints} points into one memorable image.</p>
+                </div>
 
-                {/* Thinking mode */}
-                {isThinking && !isRevealed && (
-                  <div className="animate-fade-in">
-                    <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-6 text-center mb-6">
-                      <span className="text-4xl mb-3 block animate-pulse-slow">💭</span>
-                      <h3 className="text-lg font-bold text-amber-800 mb-2">
-                        Take your time&hellip;
-                      </h3>
-                      <p className="text-amber-700 text-sm">
-                        Picture the <strong>{daf.siman}</strong> in your mind.
-                        What was the {pointIndex + 1}
-                        {pointIndex === 0 ? "st" : pointIndex === 1 ? "nd" : "rd"}{" "}
-                        key discussion on this daf?
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => handleRevealPoint(pointIndex)}
-                      className="w-full py-4 rounded-xl border-2 border-b-4 border-duo-green bg-duo-green text-white font-bold text-lg active:border-b-2 active:mt-[2px] transition-all"
-                    >
-                      Reveal the answer
-                    </button>
-                  </div>
-                )}
-
-                {/* Revealed point */}
-                {isRevealed && (
-                  <div className="animate-pop-in">
-                    <div className="bg-white border-2 border-duo-green rounded-2xl p-6 mb-4">
-                      <div className="flex items-start gap-3 mb-4">
-                        <span className="text-2xl">✅</span>
-                        <div className="flex-1">
-                          <p
-                            className="text-lg font-bold text-gray-800 leading-snug mb-2"
-                            dir="rtl"
-                          >
-                            {point.hebrew}
-                          </p>
-                          {point.english && (
-                            <p className="text-gray-600 leading-relaxed">
-                              {point.english}
-                            </p>
-                          )}
+                {/* Previously learned points */}
+                {pi > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 p-4 animate-fade-in-up" style={{ animationDelay: "0.2s", animationFillMode: "both" }}>
+                    <p className="text-xs text-gray-400 font-medium mb-2 uppercase tracking-wide">Already Learned</p>
+                    {daf.points.slice(0, pi).map((prev, prevI) => {
+                      const pc = POINT_COLORS[prevI % POINT_COLORS.length];
+                      return (
+                        <div key={prevI} className="flex items-start gap-2 mb-1.5 last:mb-0">
+                          <span className={`w-5 h-5 rounded-full ${pc.badge} text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5`}>{prevI + 1}</span>
+                          <p className="text-sm text-gray-500">{prev.english || prev.hebrew}</p>
                         </div>
-                      </div>
-                    </div>
-
-                    {/* Previously revealed points */}
-                    {pointIndex > 0 && (
-                      <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-4">
-                        <p className="text-xs text-gray-400 font-medium mb-3 uppercase tracking-wide">
-                          Previously covered
-                        </p>
-                        {daf.points.slice(0, pointIndex).map((prevPoint, pi) => (
-                          <div
-                            key={pi}
-                            className="flex items-start gap-2 mb-2 last:mb-0"
-                          >
-                            <span className="w-5 h-5 rounded-full bg-gray-200 text-gray-500 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
-                              {pi + 1}
-                            </span>
-                            <p className="text-sm text-gray-500">
-                              {prevPoint.english || prevPoint.hebrew}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
                 )}
               </div>
             );
           })()}
 
-          {/* ── ACT 4: Connections ── */}
-          {act === daf.points.length + 1 && (
+          {/* ═══ STEP N+1: DECODE THE STORY ═══ */}
+          {step === STEP_DECODE && (
+            <div className="animate-fade-in-up">
+              <div className="text-center mb-5">
+                <span className="text-4xl mb-2 block">📖</span>
+                <h2 className="text-xl font-bold text-gray-800">Decode the Story</h2>
+                <p className="text-sm text-gray-500 mt-1">Now that you&apos;ve learned the {numPoints} points, see how they all fit into one story.</p>
+              </div>
+
+              {/* The full story, highlighted */}
+              <div className="bg-amber-50 rounded-2xl border-2 border-amber-300 p-6 mb-5">
+                <p className="text-amber-900 text-base leading-relaxed font-medium">&quot;{daf.story}&quot;</p>
+              </div>
+
+              {/* Point-by-point story mapping */}
+              <div className="space-y-3 mb-5">
+                {daf.points.map((point, i) => {
+                  const color = POINT_COLORS[i % POINT_COLORS.length];
+                  return (
+                    <div key={i} className={`flex items-start gap-3 p-4 rounded-xl ${color.bg} border ${color.border} animate-fade-in-up`} style={{ animationDelay: `${i * 0.1}s`, animationFillMode: "both" }}>
+                      <span className={`w-7 h-7 rounded-full ${color.badge} text-white text-sm font-bold flex items-center justify-center flex-shrink-0 mt-0.5`}>{i + 1}</span>
+                      <div>
+                        <p className={`font-bold ${color.text} text-sm`}>{point.english || point.hebrew}</p>
+                        <p className="text-xs text-gray-500 mt-1" dir="rtl">{point.hebrew}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* The key insight */}
+              <div className="bg-[#1a3a5c]/5 rounded-2xl border-2 border-[#1a3a5c]/20 p-5">
+                <h3 className="font-bold text-[#1a3a5c] mb-2">The Memory Anchor</h3>
+                <p className="text-gray-700 text-sm leading-relaxed">
+                  When you think of <strong className="text-[#1a3a5c]">&quot;{daf.siman}&quot;</strong>,
+                  the story should play in your mind — and each scene in the story maps to a key topic.
+                  The letter <strong className="text-[#1a3a5c] text-lg">{daf.dafHebrew}</strong> leads
+                  to <strong>{daf.siman}</strong>, which leads to the story, which leads to the {numPoints} points.
+                </p>
+                <div className="flex items-center justify-center gap-3 mt-4 text-[#1a3a5c] font-bold">
+                  <span className="text-2xl">{daf.dafHebrew}</span>
+                  <span className="text-gray-300">&rarr;</span>
+                  <span>{daf.siman}</span>
+                  <span className="text-gray-300">&rarr;</span>
+                  <span>Story</span>
+                  <span className="text-gray-300">&rarr;</span>
+                  <span>{numPoints} Points</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ STEP N+2: CHECK YOURSELF ═══ */}
+          {step === STEP_CHECK && (
+            <div className="animate-fade-in-up">
+              <div className="text-center mb-5">
+                <span className="text-4xl mb-2 block">✅</span>
+                <h2 className="text-xl font-bold text-gray-800">Check Yourself</h2>
+                <p className="text-sm text-gray-500 mt-1">Now that you&apos;ve learned this daf, see if you can recognize the topics.</p>
+              </div>
+
+              <div className="space-y-5">
+                {quizQuestions.map((q, qi) => {
+                  const answered = quizAnswers[qi] != null;
+                  const revealed = quizRevealed.has(qi);
+                  const color = POINT_COLORS[qi % POINT_COLORS.length];
+                  return (
+                    <div key={qi} className="bg-white rounded-2xl border-2 border-gray-200 p-5 animate-fade-in-up" style={{ animationDelay: `${qi * 0.1}s`, animationFillMode: "both" }}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className={`w-7 h-7 rounded-full ${color.badge} text-white text-sm font-bold flex items-center justify-center`}>{qi + 1}</span>
+                        <p className="font-bold text-gray-800 text-sm">{q.question}</p>
+                      </div>
+                      <div className="space-y-2">
+                        {q.choices.map((choice, ci) => {
+                          const isSelected = quizAnswers[qi] === ci;
+                          const isCorrect = ci === q.correctIdx;
+                          let btnClass = "border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-400";
+                          if (revealed) {
+                            if (isCorrect) btnClass = "border-duo-green bg-duo-green-light text-duo-green-dark";
+                            else if (isSelected && !isCorrect) btnClass = "border-duo-red bg-duo-red-light text-duo-red";
+                            else btnClass = "border-gray-200 bg-gray-50 text-gray-400";
+                          } else if (isSelected) {
+                            btnClass = "border-[#1a3a5c] bg-[#1a3a5c]/10 text-[#1a3a5c]";
+                          }
+                          return (
+                            <button
+                              key={ci}
+                              disabled={revealed}
+                              onClick={() => setQuizAnswers(prev => ({ ...prev, [qi]: ci }))}
+                              className={`w-full text-left p-3 rounded-xl border-2 text-sm transition-all ${btnClass}`}
+                            >
+                              {choice}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {answered && !revealed && (
+                        <button
+                          onClick={() => setQuizRevealed(prev => new Set([...prev, qi]))}
+                          className={`mt-3 w-full py-2.5 rounded-xl border-2 border-b-4 ${color.border} ${color.bg} ${color.text} font-bold text-sm active:border-b-2 active:mt-[2px] transition-all`}
+                        >
+                          Check Answer
+                        </button>
+                      )}
+                      {revealed && (
+                        <div className={`mt-3 p-3 rounded-xl text-sm ${quizAnswers[qi] === q.correctIdx ? "bg-duo-green-light text-duo-green-dark" : "bg-duo-red-light text-duo-red"}`}>
+                          {quizAnswers[qi] === q.correctIdx
+                            ? "Correct! You learned this well."
+                            : `Not quite — the answer is: "${q.choices[q.correctIdx]}"`
+                          }
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ═══ STEP N+3: CONNECTIONS ═══ */}
+          {step === STEP_CONNECTIONS && (
             <div className="animate-fade-in-up">
               {/* Summary card */}
               <div className="bg-gradient-to-br from-[#1a3a5c] to-[#0d1f33] rounded-2xl p-6 text-white mb-6">
                 <div className="text-center mb-4">
                   <span className="text-4xl mb-2 block">🎯</span>
-                  <h3 className="text-xl font-bold">
-                    Daf {daf.dafHebrew} — {daf.siman}
-                  </h3>
-                  <p className="text-blue-200 text-sm mt-1">Complete!</p>
+                  <h3 className="text-xl font-bold">Daf {daf.dafHebrew} — {daf.siman}</h3>
+                  <p className="text-blue-200 text-sm mt-1">You&apos;ve completed this daf!</p>
                 </div>
-
                 <div className="space-y-3">
-                  {daf.points.map((point, i) => (
-                    <div key={i} className="flex items-start gap-3 animate-fade-in-up" style={{ animationDelay: `${i * 0.1}s`, animationFillMode: "both" }}>
-                      <span className="w-6 h-6 rounded-full bg-white/20 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
-                        {i + 1}
-                      </span>
-                      <div>
-                        <p className="text-white/90 text-sm font-medium" dir="rtl">
-                          {point.hebrew}
-                        </p>
-                        {point.english && (
-                          <p className="text-blue-200 text-xs mt-0.5">
-                            {point.english}
-                          </p>
-                        )}
+                  {daf.points.map((point, i) => {
+                    const color = POINT_COLORS[i % POINT_COLORS.length];
+                    return (
+                      <div key={i} className="flex items-start gap-3 animate-fade-in-up" style={{ animationDelay: `${i * 0.1}s`, animationFillMode: "both" }}>
+                        <span className={`w-6 h-6 rounded-full ${color.badge} text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5`}>{i + 1}</span>
+                        <div>
+                          <p className="text-white/90 text-sm font-medium" dir="rtl">{point.hebrew}</p>
+                          {point.english && <p className="text-blue-200 text-xs mt-0.5">{point.english}</p>}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Concept connections */}
               {dafConcepts.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                    <span>🔗</span> Concepts on this Daf
-                  </h3>
+                  <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><span>🔗</span> Concepts on this Daf</h3>
                   <div className="flex flex-wrap gap-2 mb-4">
                     {dafConcepts.map((c) => (
-                      <span
-                        key={c.id}
-                        className="px-3 py-1.5 rounded-full bg-[#1a3a5c]/10 text-[#1a3a5c] text-sm font-medium"
-                      >
-                        {c.name}{" "}
-                        <span className="text-[#1a3a5c]/50">
-                          ({c.dafNumbers.length} dafim)
-                        </span>
+                      <span key={c.id} className="px-3 py-1.5 rounded-full bg-[#1a3a5c]/10 text-[#1a3a5c] text-sm font-medium">
+                        {c.name} <span className="text-[#1a3a5c]/50">({c.dafNumbers.length} dafim)</span>
                       </span>
                     ))}
                   </div>
@@ -499,27 +608,16 @@ function JourneyMode({
               {/* Connected dafim */}
               {connectedDafim.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                    <span>🌐</span> Related Dafim
-                  </h3>
+                  <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><span>🌐</span> Related Dafim</h3>
                   <div className="space-y-2">
                     {connectedDafim.map(({ daf: cd, sharedConcepts }, i) => (
-                      <button
-                        key={cd.dafNumber}
-                        onClick={() => onNavigate(cd)}
-                        className="w-full text-left p-3 rounded-xl border-2 border-gray-200 bg-white hover:border-[#1a3a5c] active:border-b-2 transition-all flex items-center gap-3 animate-fade-in-up"
-                        style={{ animationDelay: `${i * 0.05}s`, animationFillMode: "both" }}
-                      >
-                        <span className="w-10 h-10 rounded-lg bg-[#1a3a5c]/10 text-[#1a3a5c] font-bold text-lg flex items-center justify-center flex-shrink-0">
-                          {cd.dafHebrew}
-                        </span>
+                      <button key={cd.dafNumber} onClick={() => onNavigate(cd)}
+                        className="w-full text-left p-3 rounded-xl border-2 border-gray-200 bg-white hover:border-[#1a3a5c] transition-all flex items-center gap-3 animate-fade-in-up"
+                        style={{ animationDelay: `${i * 0.05}s`, animationFillMode: "both" }}>
+                        <span className="w-10 h-10 rounded-lg bg-[#1a3a5c]/10 text-[#1a3a5c] font-bold text-lg flex items-center justify-center flex-shrink-0">{cd.dafHebrew}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-gray-800 text-sm">
-                            Daf {cd.dafHebrew} — {cd.siman}
-                          </p>
-                          <p className="text-xs text-gray-500 truncate">
-                            Shared: {sharedConcepts.join(", ")}
-                          </p>
+                          <p className="font-bold text-gray-800 text-sm">Daf {cd.dafHebrew} — {cd.siman}</p>
+                          <p className="text-xs text-gray-500 truncate">Shared: {sharedConcepts.join(", ")}</p>
                         </div>
                         <span className="text-gray-300">&rarr;</span>
                       </button>
@@ -531,61 +629,36 @@ function JourneyMode({
               {/* Navigate prev/next */}
               <div className="flex gap-3 mt-6">
                 {prevDaf && (
-                  <button
-                    onClick={() => onNavigate(prevDaf)}
-                    className="flex-1 py-3 rounded-xl border-2 border-b-4 border-gray-300 bg-white text-gray-600 font-bold active:border-b-2 active:mt-[2px] transition-all"
-                  >
+                  <button onClick={() => onNavigate(prevDaf)} className="flex-1 py-3 rounded-xl border-2 border-b-4 border-gray-300 bg-white text-gray-600 font-bold active:border-b-2 active:mt-[2px] transition-all">
                     &larr; Daf {prevDaf.dafHebrew}
                   </button>
                 )}
                 {nextDaf && (
-                  <button
-                    onClick={() => onNavigate(nextDaf)}
-                    className="flex-1 py-3 rounded-xl border-2 border-b-4 border-[#1a3a5c] bg-[#1a3a5c] text-white font-bold active:border-b-2 active:mt-[2px] transition-all"
-                  >
+                  <button onClick={() => onNavigate(nextDaf)} className="flex-1 py-3 rounded-xl border-2 border-b-4 border-[#1a3a5c] bg-[#1a3a5c] text-white font-bold active:border-b-2 active:mt-[2px] transition-all">
                     Daf {nextDaf.dafHebrew} &rarr;
                   </button>
                 )}
               </div>
             </div>
           )}
+
         </div>
       </div>
 
       {/* Bottom navigation */}
       <div className="bg-white border-t border-gray-200 px-4 py-3">
         <div className="max-w-2xl mx-auto flex gap-3">
-          {act > 0 && (
-            <button
-              onClick={() => {
-                setAct((a) => a - 1);
-                setThinkingPoint(null);
-              }}
-              className="flex-1 py-3 rounded-xl border-2 border-b-4 border-gray-300 bg-white text-gray-600 font-bold active:border-b-2 active:mt-[2px] transition-all"
-            >
+          {step > 0 && (
+            <button onClick={() => setStep(s => s - 1)} className="flex-1 py-3 rounded-xl border-2 border-b-4 border-gray-300 bg-white text-gray-600 font-bold active:border-b-2 active:mt-[2px] transition-all">
               Back
             </button>
           )}
           {/* ── PART 2: AI Chavrusa button ── */}
-          <button
-            onClick={() => setAiOpen(true)}
-            className="py-3 px-4 rounded-xl border-2 border-b-4 border-emerald-400 bg-emerald-50 text-emerald-700 font-bold active:border-b-2 active:mt-[2px] transition-all text-sm"
-          >
+          <button onClick={() => setAiOpen(true)} className="py-3 px-4 rounded-xl border-2 border-b-4 border-emerald-400 bg-emerald-50 text-emerald-700 font-bold active:border-b-2 active:mt-[2px] transition-all text-sm">
             🤖 AI
           </button>
-          {act < totalActs - 1 && (
-            <button
-              onClick={() => {
-                setAct((a) => a + 1);
-                setThinkingPoint(null);
-              }}
-              disabled={
-                act >= 1 &&
-                act <= daf.points.length &&
-                !revealedPoints.has(act - 1)
-              }
-              className="flex-1 py-3 rounded-xl border-2 border-b-4 border-[#1a3a5c] bg-[#1a3a5c] text-white font-bold active:border-b-2 active:mt-[2px] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            >
+          {step < totalSteps - 1 && (
+            <button onClick={() => setStep(s => s + 1)} className="flex-1 py-3 rounded-xl border-2 border-b-4 border-[#1a3a5c] bg-[#1a3a5c] text-white font-bold active:border-b-2 active:mt-[2px] transition-all">
               Continue
             </button>
           )}

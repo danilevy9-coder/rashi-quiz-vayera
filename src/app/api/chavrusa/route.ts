@@ -68,7 +68,8 @@ Important guidelines:
 - Be conversational and encouraging, like a real chavrusa
 - Use both Hebrew terms and English explanations
 - When referencing Talmudic concepts, briefly explain them for learners
-- Keep responses focused and concise (2-4 paragraphs max)
+- Keep responses SHORT and concise — aim for 2-3 short paragraphs maximum
+- Always finish your thought cleanly. Never stop mid-sentence or mid-idea.
 - Use the siman and story to help anchor explanations in memory`;
 
   if (mode === "explain") {
@@ -150,7 +151,7 @@ export async function POST(request: Request) {
       model: "gpt-4o-mini",
       messages,
       temperature: 0.7,
-      max_tokens: 800,
+      max_tokens: 300,
     });
 
     const reply = completion.choices[0]?.message?.content || "";

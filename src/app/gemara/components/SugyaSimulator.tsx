@@ -261,10 +261,8 @@ function JourneyMode({
     });
   }, [daf, allDafim]);
 
-  // ── PART 2: Auto-fetch AI explanation when arriving at a point step ──
-  useEffect(() => {
-    if (step < STEP_FIRST_POINT || step > STEP_LAST_POINT) return;
-    const pointIndex = step - 1;
+  // ── PART 2: On-demand AI explanation fetch ──
+  const fetchExplanation = useCallback((pointIndex: number) => {
     if (aiExplanations[pointIndex] || aiLoading[pointIndex]) return;
     setAiLoading(prev => ({ ...prev, [pointIndex]: true }));
     fetch("/api/chavrusa", {
@@ -288,7 +286,7 @@ function JourneyMode({
       })
       .catch(() => {})
       .finally(() => setAiLoading(prev => ({ ...prev, [pointIndex]: false })));
-  }, [step, daf, aiExplanations, aiLoading, STEP_FIRST_POINT, STEP_LAST_POINT]);
+  }, [daf, aiExplanations, aiLoading]);
 
   // Scroll to top on step change
   useEffect(() => {
@@ -388,7 +386,7 @@ function JourneyMode({
                   {point.english && <p className={`text-base ${color.text} leading-relaxed font-medium`}>{point.english}</p>}
                 </div>
 
-                {/* ── PART 2: AI-generated explanation (auto-loaded) ── */}
+                {/* ── PART 2: AI explanation (on-demand) ── */}
                 <div className="mb-5">
                   {aiLoading[pi] && (
                     <div className="bg-white rounded-2xl border-2 border-gray-200 p-5 animate-fade-in">
@@ -411,9 +409,12 @@ function JourneyMode({
                     </div>
                   )}
                   {!aiLoading[pi] && !aiExplanations[pi] && (
-                    <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 text-center">
-                      <p className="text-xs text-gray-400">AI explanation not available — tap the AI button below for a deeper dive</p>
-                    </div>
+                    <button
+                      onClick={() => fetchExplanation(pi)}
+                      className="w-full py-3.5 rounded-xl border-2 border-b-4 border-emerald-400 bg-emerald-50 text-emerald-700 font-bold active:border-b-2 active:mt-[2px] transition-all flex items-center justify-center gap-2"
+                    >
+                      <span>🤖</span> Ask AI Chavrusa to Explain
+                    </button>
                   )}
                 </div>
 

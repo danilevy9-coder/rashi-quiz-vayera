@@ -337,8 +337,17 @@ function JourneyMode({
               </div>
 
               {/* Image */}
-              <div className="rounded-2xl overflow-hidden border-2 border-gray-200 bg-white mb-5 animate-fade-in-up" style={{ animationDelay: "0.25s", animationFillMode: "both" }}>
+              <div className="rounded-2xl overflow-hidden border-2 border-gray-200 bg-white mb-0 animate-fade-in-up" style={{ animationDelay: "0.25s", animationFillMode: "both" }}>
                 <img src={imageSrc} alt={`Daf ${daf.dafHebrew} - ${daf.siman}`} className="w-full h-auto" />
+              </div>
+
+              {/* Siman label — yellow box like the Zichru PDF */}
+              <div className="bg-amber-100 border-2 border-amber-300 rounded-2xl px-5 py-3 mb-5 flex items-center justify-center gap-3 animate-fade-in-up" style={{ animationDelay: "0.3s", animationFillMode: "both" }}>
+                <span className="text-2xl font-bold text-[#1a3a5c]">{daf.dafHebrew}</span>
+                <span className="text-amber-400 text-lg">|</span>
+                <span className="text-lg font-bold text-amber-900">{daf.siman}</span>
+                <span className="text-amber-400 text-lg">|</span>
+                <span className="text-lg font-bold text-amber-800" dir="rtl">{daf.simanHebrew}</span>
               </div>
 
               {/* What you'll learn */}

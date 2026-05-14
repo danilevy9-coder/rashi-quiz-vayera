@@ -23,10 +23,11 @@ import SequenceDrill from "./components/SequenceDrill";
 import SpeedRound from "./components/SpeedRound";
 import TrueFalseQuiz from "./components/TrueFalseQuiz";
 import ImageQuiz from "./components/ImageQuiz";
+import WhatDafQuiz from "./components/WhatDafQuiz";
 import Link from "next/link";
 
 type Rating = "knew" | "partial" | "forgot";
-type GameType = "study" | "quiz" | "matching" | "sequence" | "speed" | "truefalse" | "image";
+type GameType = "study" | "quiz" | "matching" | "sequence" | "speed" | "truefalse" | "image" | "whatdaf";
 type ActiveMode = null | { type: GameType; scope: "all" | number };
 type MasechtaId = "yevamos" | "succah";
 
@@ -110,12 +111,21 @@ const GAME_TYPES: { type: GameType; title: string; desc: string; color: string; 
   },
   {
     type: "image",
-    title: "What Daf Is This?",
+    title: "Identify the Picture",
     desc: "See the illustration, pick the correct daf",
     color: "text-orange-700",
     border: "border-orange-400",
     bg: "bg-orange-50",
     emoji: "\uD83D\uDDBC\uFE0F",
+  },
+  {
+    type: "whatdaf",
+    title: "What Daf Is This?",
+    desc: "Read a topic and pick which daf it comes from",
+    color: "text-teal-700",
+    border: "border-teal-400",
+    bg: "bg-teal-50",
+    emoji: "\uD83D\uDCA1",
   },
   {
     type: "truefalse",
@@ -396,6 +406,10 @@ export default function GemaraPage() {
 
     if (activeMode.type === "image") {
       return <ImageQuiz dafim={dafim} allDafim={allDafim} title={title} imageFolder={masechta.imageFolder} onBack={goBack} />;
+    }
+
+    if (activeMode.type === "whatdaf") {
+      return <WhatDafQuiz dafim={dafim} allDafim={allDafim} title={title} onBack={goBack} />;
     }
   }
 

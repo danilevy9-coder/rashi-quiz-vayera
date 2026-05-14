@@ -3,11 +3,10 @@
 import { useState, useCallback, useRef } from "react";
 import type { Daf } from "../data/yevamos";
 
-interface ImageQuizProps {
+interface WhatDafQuizProps {
   dafim: Daf[];
   allDafim: Daf[];
   title: string;
-  imageFolder: string;
   onBack: () => void;
 }
 
@@ -24,33 +23,47 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-interface ImageQuestion {
+interface WhatDafQuestion {
   daf: Daf;
-  choices: string[]; // "Daf ב - House" format
+  pointHebrew: string;
+  pointEnglish: string;
+  choices: string[];
   correctIndex: number;
 }
 
-function generateImageQuestions(dafim: Daf[], allDafim: Daf[]): ImageQuestion[] {
-  return shuffle(dafim).map((daf) => {
+function generateQuestions(dafim: Daf[], allDafim: Daf[]): WhatDafQuestion[] {
+  const questions: WhatDafQuestion[] = [];
+
+  for (const daf of dafim) {
+    const validPoints = daf.points.filter((p) => p.hebrew || p.english);
+    if (validPoints.length === 0) continue;
+
+    // Pick one random point from this daf
+    const point = pickRandom(validPoints);
     const label = (d: Daf) => `Daf ${d.dafHebrew} — ${d.siman}`;
     const correct = label(daf);
     const distractors = shuffle(allDafim.filter((d) => d.dafNumber !== daf.dafNumber))
       .slice(0, 3)
       .map(label);
     const choices = shuffle([correct, ...distractors]);
-    return {
+
+    questions.push({
       daf,
+      pointHebrew: point.hebrew,
+      pointEnglish: point.english,
       choices,
       correctIndex: choices.indexOf(correct),
-    };
-  });
+    });
+  }
+
+  return shuffle(questions);
 }
 
 const CORRECT_MSGS = ["Correct!", "Nailed it!", "Yes!", "Exactly!", "Perfect!"];
 const WRONG_MSGS = ["Not quite!", "Oops!", "That's not it!", "Try to remember..."];
 
-export default function ImageQuiz({ dafim, allDafim, title, imageFolder, onBack }: ImageQuizProps) {
-  const [questions] = useState(() => generateImageQuestions(dafim, allDafim));
+export default function WhatDafQuiz({ dafim, allDafim, title, onBack }: WhatDafQuizProps) {
+  const [questions] = useState(() => generateQuestions(dafim, allDafim));
   const [queue, setQueue] = useState<number[]>(() => questions.map((_, i) => i));
   const [queuePos, setQueuePos] = useState(0);
   const [mastered, setMastered] = useState<Set<number>>(new Set());
@@ -145,7 +158,6 @@ export default function ImageQuiz({ dafim, allDafim, title, imageFolder, onBack 
 
   if (!question) return null;
   const isCorrect = selected !== null && selected === question.correctIndex;
-  const imageSrc = `/images/${imageFolder}-quiz/daf-${question.daf.dafNumber}.jpg`;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -163,16 +175,27 @@ export default function ImageQuiz({ dafim, allDafim, title, imageFolder, onBack 
       </header>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 max-w-3xl mx-auto w-full">
-        <span className="text-xs font-semibold text-white bg-[#1a3a5c] rounded-full px-3 py-1 mb-3 inline-block">Identify the Picture</span>
+      <div className="flex-1 flex flex-col px-4 py-6 max-w-lg mx-auto w-full">
+        <span className="text-xs font-semibold text-white bg-[#1a3a5c] rounded-full px-3 py-1 mb-4 self-start">What Daf Is This?</span>
 
-        {/* Image */}
-        <div className="rounded-xl overflow-hidden border-2 border-gray-200 mb-4 animate-fade-in">
-          <img src={imageSrc} alt="Which daf?" className="w-full h-auto" />
+        {/* Topic card */}
+        <div className="w-full p-6 rounded-2xl bg-white border-2 border-gray-200 mb-6 animate-fade-in-up">
+          {question.pointHebrew && (
+            <p className="text-xl font-bold text-gray-800 leading-relaxed text-center mb-2" dir="rtl">
+              {question.pointHebrew}
+            </p>
+          )}
+          {question.pointEnglish && (
+            <p className="text-base text-gray-500 text-center leading-relaxed">
+              {question.pointEnglish}
+            </p>
+          )}
         </div>
 
+        <p className="text-sm text-gray-400 text-center mb-4">Which daf discusses this topic?</p>
+
         {/* Choices */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="space-y-3 flex-1">
           {question.choices.map((choice, i) => {
             let borderColor = "border-duo-gray";
             let bgColor = "bg-white";
@@ -195,7 +218,7 @@ export default function ImageQuiz({ dafim, allDafim, title, imageFolder, onBack 
                 key={i}
                 onClick={() => handleChoice(i)}
                 disabled={showResult}
-                className={`py-4 px-3 rounded-xl border-2 border-b-4 ${borderColor} ${bgColor} ${textColor} font-bold text-sm text-center transition-all ${
+                className={`w-full text-left p-4 rounded-xl border-2 border-b-4 ${borderColor} ${bgColor} ${textColor} font-bold transition-all ${
                   !showResult ? "active:border-b-2 active:mt-[2px] hover:border-[#1a3a5c]" : ""
                 } animate-stagger-${i + 1}`}
               >
@@ -207,11 +230,11 @@ export default function ImageQuiz({ dafim, allDafim, title, imageFolder, onBack 
 
         {/* Feedback */}
         {showResult && (
-          <div className={`p-4 rounded-xl animate-slide-up ${isCorrect ? "bg-duo-green-light border-2 border-duo-green" : "bg-duo-red-light border-2 border-duo-red"}`}>
+          <div className={`mt-4 p-4 rounded-xl animate-slide-up ${isCorrect ? "bg-duo-green-light border-2 border-duo-green" : "bg-duo-red-light border-2 border-duo-red"}`}>
             <p className={`font-bold text-lg ${isCorrect ? "text-duo-green-dark" : "text-duo-red"}`}>{feedbackMsg}</p>
             {!isCorrect && (
               <p className="text-sm mt-1 text-duo-red/80">
-                This is Daf {question.daf.dafHebrew} &mdash; {question.daf.siman}
+                This topic is from Daf {question.daf.dafHebrew} &mdash; {question.daf.siman}
               </p>
             )}
             <button

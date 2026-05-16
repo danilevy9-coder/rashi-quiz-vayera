@@ -12,8 +12,6 @@
 
 import OpenAI from "openai";
 
-export const dynamic = "force-dynamic";
-
 // Lazy-init so the build doesn't fail when the env var is missing
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#1a3a5c"/>
+  <text x="256" y="200" text-anchor="middle" fill="#c8a84e" font-family="serif" font-size="72" font-weight="bold">ZICHRU</text>
+  <text x="256" y="320" text-anchor="middle" fill="white" font-family="serif" font-size="120" font-weight="bold">זכרו</text>
+  <rect x="136" y="380" width="240" height="6" rx="3" fill="#c8a84e" opacity="0.6"/>
+</svg>

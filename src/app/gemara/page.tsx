@@ -25,6 +25,7 @@ import TrueFalseQuiz from "./components/TrueFalseQuiz";
 import ImageQuiz from "./components/ImageQuiz";
 import WhatDafQuiz from "./components/WhatDafQuiz";
 import SugyaSimulator from "./components/SugyaSimulator";
+import OfflineDownload from "./components/OfflineDownload";
 import Link from "next/link";
 
 type Rating = "knew" | "partial" | "forgot";
@@ -511,6 +512,16 @@ export default function GemaraPage() {
               </span>
             </div>
           </div>
+        )}
+
+        {/* Offline images download */}
+        {mounted && masechta && (
+          <OfflineDownload
+            masechtaId={masechta.id}
+            masechtaName={masechta.nameEn}
+            imageFolder={masechta.imageFolder}
+            totalDafim={masechta.total}
+          />
         )}
 
         {/* Study All */}

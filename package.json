@@ -6,9 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:native": "mv src/app/api src/app/_api_excluded && NEXT_PUBLIC_STATIC_EXPORT=1 NEXT_PUBLIC_API_BASE=https://rashi-quizz.vercel.app next build; mv src/app/_api_excluded src/app/api",
+    "cap:sync": "npx cap sync",
+    "cap:ios": "npx cap open ios",
+    "cap:android": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
     "@supabase/supabase-js": "^2.105.1",
     "next": "16.2.4",
     "openai": "^6.37.0",

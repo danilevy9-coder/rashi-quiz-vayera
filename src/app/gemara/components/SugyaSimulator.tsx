@@ -15,6 +15,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import type { Daf, Perek } from "../data/yevamos";
 // ── PART 2 import (AI Chavrusa) ──
 import AIChavrusa from "./AIChavrusa";
+import { API_BASE } from "../../lib/api";
 
 // ── Concept extraction ─────────────────────────────────────
 
@@ -265,7 +266,7 @@ function JourneyMode({
   const fetchExplanation = useCallback((pointIndex: number) => {
     if (aiExplanations[pointIndex] || aiLoading[pointIndex]) return;
     setAiLoading(prev => ({ ...prev, [pointIndex]: true }));
-    fetch("/api/chavrusa", {
+    fetch(`${API_BASE}/api/chavrusa`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

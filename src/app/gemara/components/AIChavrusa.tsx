@@ -13,6 +13,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { Daf } from "../data/yevamos";
+import { API_BASE } from "../../lib/api";
 
 interface AIChavrosaProps {
   daf: Daf;
@@ -79,7 +80,7 @@ export default function AIChavrusa({ daf, isOpen, onClose }: AIChavrosaProps) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/chavrusa", {
+        const res = await fetch(`${API_BASE}/api/chavrusa`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ daf: dafToContext(daf), ...body }),

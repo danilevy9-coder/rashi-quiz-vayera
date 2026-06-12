@@ -25,11 +25,26 @@ import TrueFalseQuiz from "./components/TrueFalseQuiz";
 import ImageQuiz from "./components/ImageQuiz";
 import WhatDafQuiz from "./components/WhatDafQuiz";
 import SugyaSimulator from "./components/SugyaSimulator";
+import LearnMode from "./components/LearnMode";
+import ChainBuilder from "./components/ChainBuilder";
+import StoryDetective from "./components/StoryDetective";
 import OfflineDownload from "./components/OfflineDownload";
 import Link from "next/link";
 
 type Rating = "knew" | "partial" | "forgot";
-type GameType = "study" | "quiz" | "matching" | "sequence" | "speed" | "truefalse" | "image" | "whatdaf" | "journey";
+type GameType =
+  | "learn"
+  | "chain"
+  | "detective"
+  | "study"
+  | "quiz"
+  | "matching"
+  | "sequence"
+  | "speed"
+  | "truefalse"
+  | "image"
+  | "whatdaf"
+  | "journey";
 type ActiveMode = null | { type: GameType; scope: "all" | number };
 type MasechtaId = "yevamos" | "succah";
 
@@ -92,7 +107,44 @@ function MasteryDot({ rating }: { rating?: Rating }) {
 
 // ── Game type picker (shown after choosing a perek or "all") ─────
 
-const GAME_TYPES: { type: GameType; title: string; desc: string; color: string; border: string; bg: string; emoji: string }[] = [
+interface GameTypeEntry {
+  type: GameType;
+  title: string;
+  desc: string;
+  color: string;
+  border: string;
+  bg: string;
+  emoji: string;
+}
+
+const LEARN_TYPES: GameTypeEntry[] = [
+  {
+    type: "learn",
+    title: "Guided Lessons",
+    desc: "Learn 3 new dafim at a time: letter hook, story, points, then a mini quiz",
+    color: "text-emerald-700",
+    border: "border-emerald-500",
+    bg: "bg-emerald-50",
+    emoji: "\uD83C\uDF93",
+  },
+  {
+    type: "chain",
+    title: "Memory Chain",
+    desc: "Add one daf at a time, rebuilding the chain of simanim as you go",
+    color: "text-sky-700",
+    border: "border-sky-400",
+    bg: "bg-sky-50",
+    emoji: "\u26D3\uFE0F",
+  },
+  {
+    type: "detective",
+    title: "Story Detective",
+    desc: "Read the mnemonic story and find the 3 points hidden inside it",
+    color: "text-amber-700",
+    border: "border-amber-400",
+    bg: "bg-amber-50",
+    emoji: "\uD83D\uDD75\uFE0F",
+  },
   {
     type: "journey",
     title: "Sugya Simulator",
@@ -111,6 +163,9 @@ const GAME_TYPES: { type: GameType; title: string; desc: string; color: string; 
     bg: "bg-[#1a3a5c]/5",
     emoji: "\uD83D\uDCDA",
   },
+];
+
+const GAME_TYPES: GameTypeEntry[] = [
   {
     type: "quiz",
     title: "Multiple Choice",
@@ -197,25 +252,42 @@ function GameTypePicker({
       </header>
 
       <div className="flex-1 overflow-y-auto px-6 py-6">
-        <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">Choose a Mode</h2>
-
         <div className="max-w-sm mx-auto space-y-3">
-        {GAME_TYPES.map((g, i) => (
-          <button
-            key={g.type}
-            onClick={() => onSelect(g.type)}
-            className={`w-full p-4 rounded-xl border-2 border-b-4 ${g.border} ${g.bg} text-left active:border-b-2 active:mt-[2px] transition-all animate-fade-in-up`}
-            style={{ animationDelay: `${i * 0.05}s`, animationFillMode: "both" }}
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">{g.emoji}</span>
-              <div className="flex-1">
-                <p className={`font-bold text-base ${g.color}`}>{g.title}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{g.desc}</p>
+          <h2 className="text-sm font-bold text-gray-400 tracking-wide uppercase">📖 Learn It</h2>
+          {LEARN_TYPES.map((g, i) => (
+            <button
+              key={g.type}
+              onClick={() => onSelect(g.type)}
+              className={`w-full p-4 rounded-xl border-2 border-b-4 ${g.border} ${g.bg} text-left active:border-b-2 active:mt-[2px] transition-all animate-fade-in-up`}
+              style={{ animationDelay: `${i * 0.05}s`, animationFillMode: "both" }}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{g.emoji}</span>
+                <div className="flex-1">
+                  <p className={`font-bold text-base ${g.color}`}>{g.title}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{g.desc}</p>
+                </div>
               </div>
-            </div>
-          </button>
-        ))}
+            </button>
+          ))}
+
+          <h2 className="text-sm font-bold text-gray-400 tracking-wide uppercase pt-4">🏆 Test Yourself</h2>
+          {GAME_TYPES.map((g, i) => (
+            <button
+              key={g.type}
+              onClick={() => onSelect(g.type)}
+              className={`w-full p-4 rounded-xl border-2 border-b-4 ${g.border} ${g.bg} text-left active:border-b-2 active:mt-[2px] transition-all animate-fade-in-up`}
+              style={{ animationDelay: `${(LEARN_TYPES.length + i) * 0.05}s`, animationFillMode: "both" }}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{g.emoji}</span>
+                <div className="flex-1">
+                  <p className={`font-bold text-base ${g.color}`}>{g.title}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{g.desc}</p>
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -381,6 +453,35 @@ export default function GemaraPage() {
       setActiveMode(null);
       setPickedScope(null);
     };
+
+    if (activeMode.type === "learn") {
+      return (
+        <LearnMode
+          dafim={dafim}
+          allDafim={allDafim}
+          title={title}
+          onBack={goBack}
+          imageFolder={masechta.imageFolder}
+          masechtaId={masechta.id}
+        />
+      );
+    }
+
+    if (activeMode.type === "chain") {
+      return <ChainBuilder dafim={dafim} title={title} onBack={goBack} imageFolder={masechta.imageFolder} />;
+    }
+
+    if (activeMode.type === "detective") {
+      return (
+        <StoryDetective
+          dafim={dafim}
+          allDafim={allDafim}
+          title={title}
+          onBack={goBack}
+          imageFolder={masechta.imageFolder}
+        />
+      );
+    }
 
     if (activeMode.type === "study") {
       return (
